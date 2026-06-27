@@ -107,6 +107,10 @@ export async function GET(
 
         archive.on("end", () => {
           controller.close();
+          // Clean up files shortly after zipping finishes to ensure buffers flush
+          setTimeout(() => {
+            deleteBatchFiles(filesToZip);
+          }, 3000);
         });
 
         archive.on("error", (err: Error) => {
@@ -121,6 +125,10 @@ export async function GET(
 
         archive.finalize();
       },
+      cancel(reason) {
+        console.log(`[ZIP] Stream cancelled: ${reason}`);
+        deleteBatchFiles(filesToZip);
+      },
     });
 
     return new Response(stream, { headers });
@@ -132,5 +140,48 @@ export async function GET(
 
     console.error("[GET /api/batches/:id/zip]", err);
     return Response.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * Deletes files from disk after they've been packaged into a ZIP.
+ * If a channel folder is left empty or only contains channel artwork, it is also cleaned up.
+ */
+function deleteBatchFiles(files: Array<{ filePath: string }>) {
+  console.log(`[ZIP] Cleaning up ${files.length} files from disk...`);
+  const uniqueDirs = new Set<string>();
+
+  for (const { filePath } of files) {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log(`[ZIP] Deleted temp file: ${filePath}`);
+      }
+      uniqueDirs.add(path.dirname(filePath));
+    } catch (err) {
+      console.error(`[ZIP] Error deleting file ${filePath}:`, err);
+    }
+  }
+
+  // Check if directories are empty now and clean them up
+  for (const dir of uniqueDirs) {
+    try {
+      if (fs.existsSync(dir)) {
+        const remaining = fs.readdirSync(dir);
+        // If empty or only contains channel profile / banner images, delete them and the directory
+        const isMetadataFile = (name: string) =>
+          name.startsWith("channel_profile") || name.startsWith("channel_banner");
+
+        if (remaining.every(isMetadataFile)) {
+          for (const item of remaining) {
+            fs.unlinkSync(path.join(dir, item));
+          }
+          fs.rmdirSync(dir);
+          console.log(`[ZIP] Cleaned up channel directory: ${dir}`);
+        }
+      }
+    } catch (err) {
+      console.error(`[ZIP] Error cleaning up directory ${dir}:`, err);
+    }
   }
 }

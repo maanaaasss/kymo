@@ -7,9 +7,11 @@
  *   - Auto-forked by instrumentation.ts (Next.js server startup)
  */
 
+import fs from "fs";
+import path from "path";
 import { db } from "@/lib/db";
-import { jobs } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { jobs, batches } from "@/lib/db/schema";
+import { eq, or } from "drizzle-orm";
 import { processJob, startupCleanup } from "@/lib/worker/processor";
 import { sleep } from "@/lib/worker/progress";
 
@@ -138,6 +140,96 @@ function gracefulShutdown(signal: string): void {
   }, SHUTDOWN_TIMEOUT_MS).unref();
 }
 
+const EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * Periodically cleans up completed download batches that have expired (older than 30 minutes).
+ * This ensures that downloaded videos do not accumulate on the server's disk.
+ */
+async function cleanupExpiredFiles(): Promise<void> {
+  console.log("[worker] Running expired files cleanup check...");
+  try {
+    // 1. Find all done/partial batches
+    const completedBatches = await db.query.batches.findMany({
+      where: or(eq(batches.status, "done"), eq(batches.status, "partial")),
+    });
+
+    const now = Date.now();
+
+    for (const batch of completedBatches) {
+      // 2. Fetch all jobs in the batch
+      const batchJobs = await db.query.jobs.findMany({
+        where: eq(jobs.batchId, batch.id),
+      });
+
+      if (batchJobs.length === 0) continue;
+
+      // 3. Verify all jobs are finished, and locate the latest finishedAt timestamp
+      let allFinished = true;
+      let latestFinishedTime = 0;
+
+      for (const job of batchJobs) {
+        if (job.status !== "done" && job.status !== "failed") {
+          allFinished = false;
+          break;
+        }
+        const finishedTime = job.finishedAt ? job.finishedAt.getTime() : 0;
+        if (finishedTime > latestFinishedTime) {
+          latestFinishedTime = finishedTime;
+        }
+      }
+
+      // If all jobs are complete and the latest job finished over 30 minutes ago, delete files
+      if (allFinished && latestFinishedTime > 0 && now - latestFinishedTime > EXPIRY_MS) {
+        console.log(
+          `[worker] Batch ${batch.id} expired (completed at ${new Date(
+            latestFinishedTime
+          ).toISOString()}). Cleaning up files...`
+        );
+
+        const uniqueDirs = new Set<string>();
+
+        for (const job of batchJobs) {
+          if (job.outputPath) {
+            try {
+              if (fs.existsSync(job.outputPath)) {
+                fs.unlinkSync(job.outputPath);
+                console.log(`[worker] Cleaned up expired file: ${job.outputPath}`);
+              }
+              uniqueDirs.add(path.dirname(job.outputPath));
+            } catch (err) {
+              console.error(`[worker] Error deleting file ${job.outputPath}:`, err);
+            }
+          }
+        }
+
+        // Clean up empty directories or directories with only channel metadata assets remaining
+        for (const dir of uniqueDirs) {
+          try {
+            if (fs.existsSync(dir)) {
+              const remaining = fs.readdirSync(dir);
+              const isMetadataFile = (name: string) =>
+                name.startsWith("channel_profile") || name.startsWith("channel_banner");
+
+              if (remaining.every(isMetadataFile)) {
+                for (const item of remaining) {
+                  fs.unlinkSync(path.join(dir, item));
+                }
+                fs.rmdirSync(dir);
+                console.log(`[worker] Cleaned up channel directory: ${dir}`);
+              }
+            }
+          } catch (err) {
+            console.error(`[worker] Error cleaning up directory ${dir}:`, err);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[worker] Failed to cleanup expired files:", err);
+  }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 console.log("[worker] Starting download worker...");
@@ -150,6 +242,11 @@ recoverStaleJobs()
   .then(() => {
     startupCleanup();
 
+    // Run expired files cleanup once on startup
+    cleanupExpiredFiles().catch((err) => {
+      console.error("[worker] Initial expired cleanup error:", err);
+    });
+
     // Step 2: Start the poll loop (immediate first poll + interval)
     pollPendingJobs();
     pollTimer = setInterval(() => {
@@ -157,6 +254,13 @@ recoverStaleJobs()
         console.error("[worker] Poll loop error:", err);
       });
     }, POLL_INTERVAL_MS);
+
+    // Step 2b: Start periodic expired files cleanup (every 10 minutes)
+    setInterval(() => {
+      cleanupExpiredFiles().catch((err) => {
+        console.error("[worker] Periodic expired cleanup error:", err);
+      });
+    }, 10 * 60 * 1000);
   })
   .catch((err) => {
     console.error("[worker] Failed during startup:", err);
