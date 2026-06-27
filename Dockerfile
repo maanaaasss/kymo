@@ -4,7 +4,7 @@ FROM node:20-bookworm-slim
 # - python3: required by yt-dlp
 # - ffmpeg: required by yt-dlp for post-processing and media merging
 # - curl: to download the latest yt-dlp release binary
-# - make, g++, python3: required to compile better-sqlite3 native bindings during npm ci
+# - make, g++, python3: required to compile better-sqlite3 native bindings
 RUN apt-get update && apt-get install -y \
     python3 \
     ffmpeg \
@@ -12,6 +12,9 @@ RUN apt-get update && apt-get install -y \
     make \
     g++ \
     && rm -rf /var/lib/apt/lists/*
+
+# Install pnpm globally
+RUN npm install -g pnpm
 
 # Download and install the latest official yt-dlp binary
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
@@ -21,16 +24,16 @@ RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o 
 WORKDIR /app
 
 # Copy dependency files
-COPY package*.json ./
+COPY package.json pnpm-lock.yaml ./
 
 # Install dependencies (this compiles better-sqlite3 native bindings for Linux x64/arm64)
-RUN npm ci
+RUN pnpm install --frozen-lockfile
 
 # Copy the rest of the application code
 COPY . .
 
 # Build the Next.js production application
-RUN npm run build
+RUN pnpm run build
 
 # Expose Next.js port
 EXPOSE 3000
@@ -40,4 +43,4 @@ ENV NODE_ENV=production
 ENV PORT=3000
 
 # Run Next.js server (instrumentation.ts hook will automatically fork the worker process on startup)
-CMD ["npm", "run", "start"]
+CMD ["pnpm", "run", "start"]
