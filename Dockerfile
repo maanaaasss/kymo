@@ -26,8 +26,11 @@ WORKDIR /app
 # Copy dependency files
 COPY package.json pnpm-lock.yaml ./
 
-# Install dependencies (this compiles better-sqlite3 native bindings for Linux x64/arm64)
+# Install dependencies
 RUN pnpm install --frozen-lockfile
+
+# Rebuild native modules (better-sqlite3) for the target platform
+RUN pnpm rebuild better-sqlite3
 
 # Copy the rest of the application code
 COPY . .
