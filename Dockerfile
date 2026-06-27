@@ -24,13 +24,10 @@ RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o 
 WORKDIR /app
 
 # Copy dependency files
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml .npmrc ./
 
-# Install dependencies
+# Install dependencies (builds better-sqlite3 native bindings)
 RUN pnpm install --frozen-lockfile
-
-# Rebuild native modules (better-sqlite3) for the target platform
-RUN pnpm rebuild better-sqlite3
 
 # Copy the rest of the application code
 COPY . .
