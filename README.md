@@ -2,6 +2,8 @@
 
 A simple tool to download stuff from YouTube. Well, not *everything*, but most of the things you'll actually need (videos, audio, thumbnails, and metadata).
 
+![Kymo Preview](./public/Preview.png)
+
 ---
 
 ## Setup

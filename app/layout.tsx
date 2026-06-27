@@ -20,9 +20,52 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://kymo.download"),
   title: "Kymo — YouTube bulk downloader",
   description:
     "Browse channels, select videos, and download them in bulk. A personal-use tool for managing YouTube downloads.",
+  keywords: [
+    "YouTube bulk downloader",
+    "YouTube downloader",
+    "bulk download YouTube videos",
+    "channel downloader",
+    "YouTube playlist downloader",
+    "YouTube to mp3",
+    "YouTube to mp4",
+    "Kymo",
+    "media downloader",
+    "yt-dlp web interface"
+  ],
+  authors: [{ name: "maanaaasss", url: "https://github.com/maanaaasss" }],
+  creator: "maanaaasss",
+  publisher: "Kymo",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "https://kymo.download",
+    title: "Kymo — YouTube bulk downloader",
+    description:
+      "Browse channels, select videos, and download them in bulk. A personal-use tool for managing YouTube downloads.",
+    siteName: "Kymo",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Kymo — YouTube bulk downloader",
+    description:
+      "Browse channels, select videos, and download them in bulk. A personal-use tool for managing YouTube downloads.",
+    creator: "@maanaaasss",
+  },
 };
 
 export default function RootLayout({
