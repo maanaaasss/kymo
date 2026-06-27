@@ -23,7 +23,6 @@ const KNOWN_PATHS: Record<string, string[]> = {
 };
 
 function resolveBinary(name: string): string | null {
-  // Try PATH lookup first
   for (const cmd of [`command -v ${name}`, `which ${name}`]) {
     try {
       const result = execSync(cmd, {
@@ -47,17 +46,12 @@ function resolveBinary(name: string): string | null {
       // continue
     }
   }
-  // Fallback: check known paths directly
   for (const p of KNOWN_PATHS[name] ?? []) {
     if (existsSync(p)) return p;
   }
   return null;
 }
 
-/**
- * Check whether a system binary is installed and accessible.
- * Returns structured status including the resolved path and version string.
- */
 function checkBinary(name: string): BinaryStatus {
   const binPath = resolveBinary(name);
   if (!binPath) {
@@ -96,20 +90,20 @@ export interface SystemHealthStatus {
   };
 }
 
-/**
- * Check all required system binaries and return overall health status.
- */
 export function checkSystemHealth(): SystemHealthStatus {
   const ytDlp = checkBinary("yt-dlp");
   const ffmpeg = checkBinary("ffmpeg");
 
-  // Clean up ffmpeg version: "ffmpeg version 8.1.2 Copyright..." → "ffmpeg 8.1.2"
   if (ffmpeg.version) {
     const match = ffmpeg.version.match(/ffmpeg version (\S+)/);
     if (match) {
       ffmpeg.version = `ffmpeg ${match[1]}`;
     }
   }
+
+  console.log("[health] yt-dlp:", ytDlp.found ? `found at ${ytDlp.path}` : "NOT FOUND");
+  console.log("[health] ffmpeg:", ffmpeg.found ? `found at ${ffmpeg.path}` : "NOT FOUND");
+  console.log("[health] PATH:", process.env.PATH);
 
   return {
     healthy: ytDlp.found && ffmpeg.found,
