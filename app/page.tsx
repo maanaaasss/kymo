@@ -109,18 +109,23 @@ export default function HomePage() {
   // Check system health on mount
   useEffect(() => {
     async function fetchHealth() {
+      const fallback = {
+        healthy: false,
+        binaries: {
+          ytDlp: { name: "yt-dlp", found: false, version: null, path: null },
+          ffmpeg: { name: "ffmpeg", found: false, version: null, path: null },
+        },
+      };
       try {
         const res = await fetch("/api/health");
         const data = await res.json();
-        setHealth(data);
+        if (!data?.binaries) {
+          setHealth(fallback);
+        } else {
+          setHealth(data);
+        }
       } catch {
-        setHealth({
-          healthy: false,
-          binaries: {
-            ytDlp: { name: "yt-dlp", found: false, version: null, path: null },
-            ffmpeg: { name: "ffmpeg", found: false, version: null, path: null },
-          },
-        });
+        setHealth(fallback);
       } finally {
         setHealthLoading(false);
       }
