@@ -1,4 +1,5 @@
 import { execSync } from "child_process";
+import { existsSync } from "fs";
 
 export interface BinaryStatus {
   name: string;
@@ -7,47 +8,84 @@ export interface BinaryStatus {
   path: string | null;
 }
 
+const KNOWN_PATHS: Record<string, string[]> = {
+  "yt-dlp": [
+    "/usr/local/bin/yt-dlp",
+    "/usr/bin/yt-dlp",
+    "/opt/homebrew/bin/yt-dlp",
+    "/usr/local/yt-dlp",
+  ],
+  ffmpeg: [
+    "/usr/bin/ffmpeg",
+    "/usr/local/bin/ffmpeg",
+    "/opt/homebrew/bin/ffmpeg",
+  ],
+};
+
+function resolveBinary(name: string): string | null {
+  // Try PATH lookup first
+  for (const cmd of [`command -v ${name}`, `which ${name}`]) {
+    try {
+      const result = execSync(cmd, {
+        encoding: "utf-8",
+        timeout: 5000,
+        env: {
+          ...process.env,
+          PATH: [
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin",
+            "/opt/homebrew/bin",
+            process.env.PATH,
+          ]
+            .filter(Boolean)
+            .join(":"),
+        },
+      }).trim();
+      if (result) return result;
+    } catch {
+      // continue
+    }
+  }
+  // Fallback: check known paths directly
+  for (const p of KNOWN_PATHS[name] ?? []) {
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
 /**
- * Check whether a system binary is installed and accessible on $PATH.
+ * Check whether a system binary is installed and accessible.
  * Returns structured status including the resolved path and version string.
- *
- * Used on startup and via the /api/health endpoint to show a clear,
- * friendly error when yt-dlp or ffmpeg is missing (Section 2, non-negotiable).
  */
 function checkBinary(name: string): BinaryStatus {
+  const binPath = resolveBinary(name);
+  if (!binPath) {
+    return { name, found: false, version: null, path: null };
+  }
+
+  let version: string | null = null;
   try {
-    // Resolve the binary path
-    const binPath = execSync(`command -v ${name}`, {
+    const versionOutput = execSync(`${binPath} --version`, {
       encoding: "utf-8",
       timeout: 5000,
+      stdio: ["pipe", "pipe", "pipe"],
     }).trim();
-
-    // Get version string — try both --version and -version (ffmpeg uses single dash)
-    let version: string | null = null;
+    version = versionOutput.split("\n")[0];
+  } catch {
     try {
-      const versionOutput = execSync(`${name} --version`, {
+      const versionOutput = execSync(`${binPath} -version`, {
         encoding: "utf-8",
         timeout: 5000,
         stdio: ["pipe", "pipe", "pipe"],
       }).trim();
       version = versionOutput.split("\n")[0];
     } catch {
-      try {
-        const versionOutput = execSync(`${name} -version`, {
-          encoding: "utf-8",
-          timeout: 5000,
-          stdio: ["pipe", "pipe", "pipe"],
-        }).trim();
-        version = versionOutput.split("\n")[0];
-      } catch {
-        version = "installed (version unknown)";
-      }
+      version = "installed (version unknown)";
     }
-
-    return { name, found: true, version, path: binPath };
-  } catch {
-    return { name, found: false, version: null, path: null };
   }
+
+  return { name, found: true, version, path: binPath };
 }
 
 export interface SystemHealthStatus {
