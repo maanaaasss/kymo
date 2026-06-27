@@ -35,12 +35,10 @@ export async function proxyIfRemote(
   }
 
   try {
-    console.log(`[proxy] Fetching ${request.method} ${targetUrl}`);
     const res = await fetch(targetUrl, {
       ...init,
       signal: AbortSignal.timeout(30000),
     });
-    console.log(`[proxy] Response: ${res.status}`);
 
     // Proxy the response, including streaming for ZIP downloads
     if (res.headers.get("content-type")?.includes("application/zip")) {
@@ -60,10 +58,9 @@ export async function proxyIfRemote(
       headers: { "content-type": "application/json" },
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    console.error(`[proxy] Failed to reach backend at ${targetUrl}:`, detail);
+    console.error(`[proxy] Failed to reach backend at ${targetUrl}`, err);
     return NextResponse.json(
-      { error: "Backend unavailable", detail, targetUrl },
+      { error: "Backend unavailable — try again in a moment" },
       { status: 502 }
     );
   }

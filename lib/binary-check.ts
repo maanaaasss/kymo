@@ -101,10 +101,6 @@ export function checkSystemHealth(): SystemHealthStatus {
     }
   }
 
-  console.log("[health] yt-dlp:", ytDlp.found ? `found at ${ytDlp.path}` : "NOT FOUND");
-  console.log("[health] ffmpeg:", ffmpeg.found ? `found at ${ffmpeg.path}` : "NOT FOUND");
-  console.log("[health] PATH:", process.env.PATH);
-
   return {
     healthy: ytDlp.found && ffmpeg.found,
     binaries: { ytDlp, ffmpeg },
