@@ -5,6 +5,6 @@ export default defineConfig({
   out: "./drizzle",
   dialect: "sqlite",
   dbCredentials: {
-    url: "./data/onlytube.db",
+    url: "./data/kymo.db",
   },
 });

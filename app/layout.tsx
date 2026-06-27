@@ -20,7 +20,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Loupe — YouTube bulk downloader",
+  title: "Kymo — YouTube bulk downloader",
   description:
     "Browse channels, select videos, and download them in bulk. A personal-use tool for managing YouTube downloads.",
 };

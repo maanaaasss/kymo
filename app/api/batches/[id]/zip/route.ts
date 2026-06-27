@@ -95,7 +95,7 @@ export async function GET(
     headers.set("Content-Type", "application/zip");
     headers.set(
       "Content-Disposition",
-      `attachment; filename="onlytube-batch-${id.slice(0, 8)}.zip"`
+      `attachment; filename="kymo-batch-${id.slice(0, 8)}.zip"`
     );
 
     // Create a ReadableStream from archiver events

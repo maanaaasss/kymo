@@ -9,7 +9,7 @@ import fs from "fs";
  * The directory is auto-created if it doesn't exist.
  */
 const DB_DIR = path.join(process.cwd(), "data");
-const DB_PATH = path.join(DB_DIR, "onlytube.db");
+const DB_PATH = path.join(DB_DIR, "kymo.db");
 
 // Ensure the data directory exists
 if (!fs.existsSync(DB_DIR)) {

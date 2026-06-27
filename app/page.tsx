@@ -7,9 +7,11 @@ import {
   AlertTriangle,
   ArrowRight,
   Loader2,
+  Star,
   Link as LinkIcon,
 } from "lucide-react";
 import { CapabilityCards } from "@/components/landing/CapabilityCards";
+import gsap from "gsap";
 
 interface BinaryStatus {
   name: string;
@@ -26,12 +28,23 @@ interface SystemHealthStatus {
   };
 }
 
-interface RecentChannel {
-  id: string;
-  title: string;
-}
-
 let hasAnimatedGlobal = false;
+
+const WORDS = ["thumbnail", "video", "audio", "banner", "metadata"];
+
+const getDrawDuration = (word: string) => {
+  const len = word.length;
+  if (len <= 5) return 1.2;
+  if (len >= 9) return 0.8;
+  return 1.2 - ((len - 5) / 4) * 0.4;
+};
+
+const getRetractDuration = (word: string) => {
+  const len = word.length;
+  if (len <= 5) return 0.8;
+  if (len >= 9) return 0.6;
+  return 0.8 - ((len - 5) / 4) * 0.2;
+};
 
 export default function HomePage() {
   const router = useRouter();
@@ -46,74 +59,52 @@ export default function HomePage() {
   });
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const underlineRef = useRef<SVGSVGElement>(null);
 
-  // Rotating Headline State (Flatking-Inspired)
-  const headlineWords = ["video", "audio", "thumbnail", "banner"];
-  const [currentWordIndex, setCurrentWordIndex] = useState(0);
-  const [nextWordIndex, setNextWordIndex] = useState(0);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const wordIndexRef = useRef(0);
-  const cycleIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const hoverResumeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Dynamic Wave Path Generator
+  const generateWave = useCallback((word: string) => {
+    const C = word.length;
+    const W = 20; // Wavelength in viewBox units
+    const viewBoxWidth = C * W;
+    let d = "M 0 5 Q 5 1, 10 5";
+    for (let i = 2; i <= 2 * C; i++) {
+      d += ` T ${i * 10} 5`;
+    }
+    return {
+      d,
+      viewBox: `0 0 ${viewBoxWidth} 10`,
+    };
+  }, []);
 
-  const currentWord = headlineWords[currentWordIndex];
-  const nextWord = headlineWords[nextWordIndex];
-  const maxWordLength = Math.max(...headlineWords.map((w) => w.length));
+  const [wavePath, setWavePath] = useState(() => generateWave("thumbnail").d);
+  const [waveViewBox, setWaveViewBox] = useState(() => generateWave("thumbnail").viewBox);
+  const [cycleIndex, setCycleIndex] = useState(0);
+  const isDrawingRef = useRef(false);
 
-  const transitionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Draw wave in whenever cycleIndex updates and isDrawingRef is set
+  useEffect(() => {
+    if (cycleIndex === 0 && !isDrawingRef.current) return; // skip initial mount if handled by intro
 
-  const triggerSwap = useCallback(
-    (targetIndex: number) => {
-      if (targetIndex === wordIndexRef.current) return;
+    if (!underlineRef.current) return;
+    const path = underlineRef.current.querySelector("path");
+    if (!path) return;
 
-      if (transitionTimeoutRef.current) {
-        clearTimeout(transitionTimeoutRef.current);
-        transitionTimeoutRef.current = null;
-      }
+    // Retrieve active word to compute duration
+    const currentWord = WORDS[cycleIndex];
+    const drawDuration = getDrawDuration(currentWord);
 
-      setCurrentWordIndex(wordIndexRef.current);
-      setIsTransitioning(true);
-      wordIndexRef.current = targetIndex;
-      setNextWordIndex(targetIndex);
+    gsap.killTweensOf(path);
+    const len = path.getTotalLength();
+    path.setAttribute("stroke-dasharray", len.toString());
 
-      transitionTimeoutRef.current = setTimeout(() => {
-        setCurrentWordIndex(targetIndex);
-        setIsTransitioning(false);
-        transitionTimeoutRef.current = null;
-      }, 650);
-    },
-    []
-  );
-
-  const startWordSwap = useCallback(() => {
-    if (cycleIntervalRef.current) clearInterval(cycleIntervalRef.current);
-    cycleIntervalRef.current = setInterval(() => {
-      const nextIndex = (wordIndexRef.current + 1) % headlineWords.length;
-      triggerSwap(nextIndex);
-    }, 2300);
-  }, [triggerSwap, headlineWords.length]);
-
-  const handleHoverCard = useCallback(
-    (index: number | null) => {
-      if (hoverResumeTimeoutRef.current) {
-        clearTimeout(hoverResumeTimeoutRef.current);
-        hoverResumeTimeoutRef.current = null;
-      }
-
-      if (index !== null) {
-        if (cycleIntervalRef.current) {
-          clearInterval(cycleIntervalRef.current);
-          cycleIntervalRef.current = null;
-        }
-        triggerSwap(index);
-      } else {
-        hoverResumeTimeoutRef.current = setTimeout(() => {
-          startWordSwap();
-        }, 2000);
-      }
-    },
-    [triggerSwap, startWordSwap]
-  );
+    if (isDrawingRef.current) {
+      path.setAttribute("stroke-dashoffset", len.toString());
+      gsap.to(path, { strokeDashoffset: 0, duration: drawDuration, ease: "power2.out" });
+      isDrawingRef.current = false;
+    }
+  }, [cycleIndex]);
 
   // Check system health on mount
   useEffect(() => {
@@ -146,7 +137,7 @@ export default function HomePage() {
 
   // Determine if we should play the entry animation
   useEffect(() => {
-    const hasAnimated = sessionStorage.getItem("loupe-hero-animated");
+    const hasAnimated = sessionStorage.getItem("kymo-hero-animated");
     if (!hasAnimated) {
       setShouldAnimate(true);
     } else {
@@ -155,87 +146,212 @@ export default function HomePage() {
     }
   }, []);
 
+  // Headline scramble-decode word cycle animation
+  useEffect(() => {
+    const words = ["thumbnail", "video", "audio", "banner", "metadata"];
+    let wordIndex = 0;
+    let isMounted = true;
+    let scrambleInterval: NodeJS.Timeout | null = null;
+    let sequenceTimeout: NodeJS.Timeout | null = null;
+
+    // Helper to get wave path length
+    const getPathInfo = () => {
+      if (underlineRef.current) {
+        const path = underlineRef.current.querySelector("path");
+        if (path) {
+          try {
+            return { path, len: path.getTotalLength() };
+          } catch {
+            return { path, len: 182 }; // fallback if DOM not fully painted
+          }
+        }
+      }
+      return null;
+    };
+
+    // Set initial text content
+    if (textRef.current) {
+      textRef.current.textContent = words[0];
+    }
+
+    // Set initial underline state to fully drawn on mount
+    const initUnderline = () => {
+      const info = getPathInfo();
+      if (info) {
+        const { path, len } = info;
+        path.setAttribute("stroke-dasharray", len.toString());
+        path.setAttribute("stroke-dashoffset", "0");
+      }
+    };
+    
+    // Slight delay to allow DOM to paint and getTotalLength to execute correctly
+    setTimeout(() => {
+      if (isMounted) initUnderline();
+    }, 50);
+
+    const startNextCycle = (currentIndex: number) => {
+      if (!isMounted) return;
+
+      const nextIndex = (currentIndex + 1) % words.length;
+      const targetWord = words[nextIndex];
+      const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      if (prefersReduced) {
+        sequenceTimeout = setTimeout(() => {
+          if (!isMounted) return;
+          if (textRef.current) {
+            textRef.current.textContent = targetWord;
+          }
+          const info = getPathInfo();
+          if (info) {
+            info.path.setAttribute("stroke-dashoffset", "0");
+          }
+          startNextCycle(nextIndex);
+        }, 2000);
+        return;
+      }
+
+      // Step 1: Retract wave
+      const info = getPathInfo();
+      if (info) {
+        const { path, len } = info;
+        const currentWord = words[currentIndex];
+        const retractDuration = getRetractDuration(currentWord);
+        gsap.killTweensOf(path);
+        gsap.to(path, { strokeDashoffset: len, duration: retractDuration, ease: "power2.in" });
+      }
+
+      // Step 2: After retractDuration, begin scramble loop (duration: 450ms)
+      const currentWord = words[currentIndex];
+      const retractDurationMs = getRetractDuration(currentWord) * 1000;
+      sequenceTimeout = setTimeout(() => {
+        if (!isMounted) return;
+
+        let tick = 0;
+        const totalTicks = 20;
+        const tickInterval = 40; // 20 * 40 = 800ms
+        const randomChars = "abcdefghijklmnopqrstuvwxyz";
+
+        scrambleInterval = setInterval(() => {
+          tick++;
+          const lockedCount = Math.floor((tick / totalTicks) * targetWord.length);
+          let scrambled = targetWord.substring(0, lockedCount);
+          for (let i = lockedCount; i < targetWord.length; i++) {
+            scrambled += randomChars[Math.floor(Math.random() * randomChars.length)];
+          }
+
+          if (textRef.current) {
+            textRef.current.textContent = scrambled;
+          }
+
+          if (tick >= totalTicks) {
+            if (scrambleInterval) clearInterval(scrambleInterval);
+            if (textRef.current) {
+              textRef.current.textContent = targetWord;
+            }
+
+            // Trigger Step 3 (Draw) by updating wave states and setting drawing flag
+            const nextWave = generateWave(targetWord);
+            isDrawingRef.current = true;
+            setWavePath(nextWave.d);
+            setWaveViewBox(nextWave.viewBox);
+            setCycleIndex(nextIndex);
+
+            // Step 4: After draw complete, hold for exactly 2000ms, then trigger next cycle
+            const drawDurationMs = getDrawDuration(targetWord) * 1000;
+            sequenceTimeout = setTimeout(() => {
+              if (!isMounted) return;
+              startNextCycle(nextIndex);
+            }, drawDurationMs + 2000);
+          }
+        }, tickInterval);
+
+      }, retractDurationMs);
+    };
+
+    // Initially start the loop after the first hold duration (2000ms)
+    sequenceTimeout = setTimeout(() => {
+      startNextCycle(0);
+    }, 2000);
+
+    return () => {
+      isMounted = false;
+      if (scrambleInterval) clearInterval(scrambleInterval);
+      if (sequenceTimeout) clearTimeout(sequenceTimeout);
+    };
+  }, [generateWave]);
+
   // GSAP entrance animation sequence
   useEffect(() => {
     if (shouldAnimate !== true) return;
+    if (!containerRef.current) return;
 
     Promise.all([import("gsap")]).then(([{ default: gsap }]) => {
-      // Set initial state coordinates for the reveal
-      gsap.set(".logo-animation-target", { y: 14, opacity: 0 });
-      gsap.set(".tagline-animation-target", { y: 14, opacity: 0 });
-      gsap.set(".input-animation-target", { y: 14, opacity: 0 });
-      gsap.set(".card-animation-target", { y: 14, rotate: 0, opacity: 0 });
+      const q = gsap.utils.selector(containerRef);
 
-      // Strip page container gsap-init
-      gsap.set(".page-reveal-container", { opacity: 0 });
-      document.querySelector(".page-reveal-container")?.classList.remove("gsap-init");
+      gsap.set(q(".logo-animation-target"), { y: 14, opacity: 0 });
+      gsap.set(q(".tagline-animation-target"), { y: 14, opacity: 0 });
+      gsap.set(q(".input-animation-target"), { y: 14, opacity: 0 });
+      gsap.set(q(".card-animation-target"), { y: 14, rotate: 0, opacity: 0 });
+      if (underlineRef.current) {
+        const path = underlineRef.current.querySelector("path");
+        if (path) {
+          const len = path.getTotalLength();
+          path.setAttribute("stroke-dasharray", len.toString());
+          gsap.set(path, { strokeDashoffset: len });
+        }
+      }
 
-      // Strip .gsap-init classes from targets
-      document
-        .querySelectorAll(
-          ".logo-animation-target, .tagline-animation-target, .input-animation-target, .card-animation-target"
-        )
+      gsap.set(containerRef.current, { opacity: 0 });
+      containerRef.current?.classList.remove("gsap-init");
+
+      q(".logo-animation-target, .tagline-animation-target, .input-animation-target, .card-animation-target")
         .forEach((el) => el.classList.remove("gsap-init"));
 
-      // Mark as animated immediately to prevent replay triggers on navigate/refresh
-      sessionStorage.setItem("loupe-hero-animated", "true");
+      sessionStorage.setItem("kymo-hero-animated", "true");
       hasAnimatedGlobal = true;
 
       const tl = gsap.timeline();
 
-      // --- PHASE 1: PAGE CONTAINER FADE IN ---
       tl.addLabel("pageFade", 0);
       tl.to(
-        ".page-reveal-container",
-        {
-          opacity: 1,
-          duration: 0.8,
-          ease: "power2.out",
-        },
+        containerRef.current,
+        { opacity: 1, duration: 0.8, ease: "power2.out" },
         "pageFade"
       );
 
-      // --- PHASE 2: REVEAL ---
       tl.addLabel("reveal", 0.25);
 
-      // 1. Logo
       tl.to(
-        ".logo-animation-target",
-        {
-          opacity: 1,
-          y: 0,
-          duration: 0.45,
-          ease: "power2.out",
-        },
+        q(".logo-animation-target"),
+        { opacity: 1, y: 0, duration: 0.45, ease: "power2.out" },
         "reveal"
       );
 
-      // 2. Headline Tagline
       tl.to(
-        ".tagline-animation-target",
-        {
-          opacity: 1,
-          y: 0,
-          duration: 0.45,
-          ease: "power2.out",
-        },
+        q(".tagline-animation-target"),
+        { opacity: 1, y: 0, duration: 0.45, ease: "power2.out" },
         "reveal+=0.15"
       );
 
-      // 3. Input form field
+      if (underlineRef.current) {
+        const path = underlineRef.current.querySelector("path");
+        if (path) {
+          tl.to(
+            path,
+            { strokeDashoffset: 0, duration: 1.2, ease: "power2.out" },
+            "reveal+=0.25"
+          );
+        }
+      }
+
       tl.to(
-        ".input-animation-target",
-        {
-          opacity: 1,
-          y: 0,
-          duration: 0.45,
-          ease: "power2.out",
-        },
+        q(".input-animation-target"),
+        { opacity: 1, y: 0, duration: 0.45, ease: "power2.out" },
         "reveal+=0.3"
       );
 
-      // 4. Staggered capability cards fanned deck reveal
-      const cards = document.querySelectorAll(".card-animation-target");
+      const cards = q(".card-animation-target");
       cards.forEach((card, idx) => {
         const restingRotation = parseFloat(
           card.getAttribute("data-resting-rotation") || "0"
@@ -249,39 +365,31 @@ export default function HomePage() {
             duration: 0.5,
             ease: "back.out(1.5)",
             onComplete: () => {
-              // Clear inline GSAP transforms once completed so CSS card transitions can work
               gsap.set(card, { clearProps: "transform,rotate" });
             },
           },
           `reveal+=${0.45 + idx * 0.08}`
         );
       });
-
-      // --- PHASE 3: RUN CYCLER ---
-      tl.call(startWordSwap, [], "reveal+=0.4");
     });
-  }, [shouldAnimate, startWordSwap]);
+  }, [shouldAnimate]);
 
   // Strip initial hidden state class immediately if already animated
   useEffect(() => {
-    if (shouldAnimate === false) {
-      document.querySelectorAll(".gsap-init").forEach((el) => {
+    if (shouldAnimate === false && containerRef.current) {
+      containerRef.current.querySelectorAll(".gsap-init").forEach((el) => {
         el.classList.remove("gsap-init");
       });
-      // Start cycles instantly if entrance timeline is bypassed
-      startWordSwap();
+      if (underlineRef.current) {
+        const path = underlineRef.current.querySelector("path");
+        if (path) {
+          const len = path.getTotalLength();
+          path.setAttribute("stroke-dasharray", len.toString());
+          path.style.strokeDashoffset = "0";
+        }
+      }
     }
-  }, [shouldAnimate, startWordSwap]);
-
-  // Cleanup timers on unmount
-  useEffect(() => {
-    return () => {
-      if (cycleIntervalRef.current) clearInterval(cycleIntervalRef.current);
-      if (hoverResumeTimeoutRef.current)
-        clearTimeout(hoverResumeTimeoutRef.current);
-      if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current);
-    };
-  }, []);
+  }, [shouldAnimate]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -305,7 +413,6 @@ export default function HomePage() {
           return;
         }
 
-        // Navigate to the channel page
         router.push(`/channel/${data.channelId}`);
       } catch {
         setResolveError(
@@ -329,38 +436,67 @@ export default function HomePage() {
     shouldAnimate === null || shouldAnimate === true ? "gsap-init" : "";
 
   return (
-    <div className={`flex flex-1 flex-col items-center justify-center px-[var(--space-5)] py-[var(--space-7)] relative page-reveal-container ${initClass}`}>
+    <div
+      ref={containerRef}
+      className={`flex flex-1 flex-col items-center justify-center px-[var(--space-5)] py-[var(--space-7)] relative page-reveal-container ${initClass}`}
+    >
       
-      {/* Viewfinder Logo - top-left corner */}
+      {/* Kymo Logo - top-left corner */}
       <div
-        className={`absolute top-[var(--space-5)] left-[var(--space-5)] logo-animation-target z-10 ${initClass}`}
+        className={`absolute top-[var(--space-5)] left-[var(--space-5)] logo-animation-target z-10 flex items-center gap-2 select-none ${initClass}`}
       >
         <svg
-          width="20"
+          viewBox="0 0 34 20"
+          width="34"
           height="20"
-          viewBox="0 0 18 18"
-          className="text-[var(--accent-ember)]"
+          fill="none"
+          className="text-[#E2562B]"
         >
-          {/* Top-Left L-shape */}
           <path
-            d="M2 7V2H7"
-            fill="none"
+            d="M2 10 C 5 3, 9 3, 12 10 C 15 17, 19 17, 22 10 C 25 3, 29 3, 32 10"
             stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          {/* Bottom-Right L-shape */}
-          <path
-            d="M16 11V16H11"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
+            strokeWidth="2.2"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
         </svg>
+        <span className="font-sans font-medium text-[16px] text-[var(--text-primary)] leading-none mt-[-1px]">
+          Kymo
+        </span>
       </div>
+
+      {/* GitHub Star Button - top-right corner */}
+      <a
+        href="https://github.com/maanaaasss/tube.manaaasss"
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`absolute top-[var(--space-5)] right-[var(--space-5)] logo-animation-target z-10 ${initClass}`}
+      >
+        <div
+          className="
+            flex items-center gap-[var(--space-2)]
+            rounded-[var(--radius-card)]
+            border border-[var(--border-subtle)]
+            bg-[var(--bg-surface)]
+            px-[var(--space-3)] py-[var(--space-2)]
+            text-[var(--text-body)] text-[var(--text-secondary)]
+            transition-all duration-[140ms] ease-out
+            hover:border-[var(--accent-ember)]/50 hover:text-[var(--text-primary)]
+            hover:bg-[var(--bg-surface-raised)]
+          "
+        >
+          <svg
+            viewBox="0 0 16 16"
+            width="16"
+            height="16"
+            fill="currentColor"
+          >
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+          </svg>
+          <Star size={14} />
+          <span className="font-medium">Star</span>
+        </div>
+      </a>
 
       {/* Binary status banners */}
       <AnimatePresence>
@@ -401,52 +537,40 @@ export default function HomePage() {
       {/* Main content */}
       <div className="w-full max-w-[560px]">
         
-        {/* Rotating Headline Container */}
+        {/* Headline */}
         <div className="text-center mb-[var(--space-7)]">
-          {/* Rotating Headline */}
-          <div
-            className={`tagline-animation-target text-[28px] md:text-[30px] font-medium text-text-primary tracking-tight leading-none whitespace-nowrap flex items-center justify-center gap-1.5 relative z-10 ${initClass}`}
+          <h1
+            className={`tagline-animation-target text-[28px] md:text-[30px] font-medium text-text-primary tracking-tight leading-none whitespace-nowrap flex items-center justify-center relative z-10 w-full ${initClass}`}
           >
-            <span>Download YouTube</span>
-            <span
-              className="relative inline-block text-left"
-              style={{ width: `${maxWordLength * 16}px` }}
-            >
-              <span
-                className={`word-cycler-container ${
-                  isTransitioning ? "trigger-slide" : ""
-                }`}
-              >
-                {(() => {
-                  const maxLength = Math.max(currentWord.length, nextWord.length);
-                  return Array.from({ length: maxLength }).map((_, index) => {
-                    const char1 = currentWord[index] || " ";
-                    const char2 = nextWord[index] || " ";
-                    return (
-                      <span key={index} className="char-slot">
-                        <span
-                          className="char-line first font-sans"
-                          style={{
-                            transitionDelay: `${index * 0.02}s`,
-                          }}
-                        >
-                          {char1 === " " ? "\u00A0" : char1}
-                        </span>
-                        <span
-                          className="char-line second font-sans"
-                          style={{
-                            transitionDelay: `${index * 0.03 + 0.05}s`,
-                          }}
-                        >
-                          {char2 === " " ? "\u00A0" : char2}
-                        </span>
-                      </span>
-                    );
-                  });
-                })()}
+            <span className="inline-block w-[50%] text-right pr-[4px]">
+              Download YouTube
+            </span>
+            <span className="inline-block w-[50%] text-left pl-[4px] relative select-none">
+              <span className="inline-block relative">
+                <span
+                  ref={textRef}
+                  className="italic font-medium"
+                  style={{ color: "#E2562B" }}
+                >
+                  video
+                </span>
+                <svg
+                  ref={underlineRef}
+                  className="absolute bottom-[-6px] left-0 w-full h-[10px] pointer-events-none"
+                  viewBox={waveViewBox}
+                  preserveAspectRatio="xMinYMid slice"
+                >
+                  <path
+                    d={wavePath}
+                    fill="none"
+                    stroke="#E2562B"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
               </span>
             </span>
-          </div>
+          </h1>
         </div>
 
         {/* URL Input */}
@@ -471,7 +595,9 @@ export default function HomePage() {
           >
             <LinkIcon
               size={16}
-              className="ml-[var(--space-4)] shrink-0 text-[var(--text-secondary)]"
+              className={`ml-[var(--space-4)] shrink-0 transition-colors duration-200 ${
+                isFocused || isValidUrl ? "text-[#E2562B]" : "text-[var(--text-secondary)]/60"
+              }`}
             />
             <input
               ref={inputRef}
@@ -480,7 +606,7 @@ export default function HomePage() {
               onChange={(e) => setUrl(e.target.value)}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder="Paste a YouTube channel, playlist, or video URL…"
+              placeholder="What are we grabbing? Paste a link..."
               disabled={!health?.healthy && !healthLoading}
               className={`
                 flex-1 bg-transparent
@@ -529,7 +655,7 @@ export default function HomePage() {
 
         {/* Capability Cards */}
         <CapabilityCards
-          onHoverCard={handleHoverCard}
+          onHoverCard={() => {}}
           shouldAnimate={shouldAnimate}
         />
 

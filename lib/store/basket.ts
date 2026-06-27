@@ -139,7 +139,7 @@ export const useBasketStore = create<BasketStore>()(
 
     }),
     {
-      name: "onlytube-basket",
+      name: "kymo-basket",
       // Only persist items and lastSelectedId, not UI state
       partialize: (state) => ({
         items: state.items,
