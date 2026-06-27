@@ -1,0 +1,291 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   OnlyTube Design Tokens
+   Implements Section 3.2 of the project plan.
+   Dark mode is the default. Light mode activated via [data-theme="light"].
+   ========================================================================== */
+
+:root {
+  /* Colors — Dark (default) */
+  --bg-canvas: #14151A;
+  --bg-surface: #1C1D24;
+  --bg-surface-raised: #23242C;
+  --border-subtle: #2A2B33;
+  --text-primary: #F3F2EE;
+  --text-secondary: #9A9AA2;
+  --accent-ember: #FF6B35;
+  --accent-ember-hover: #FF8A5C;
+  --accent-ember-pressed: #E55A28;
+  --accent-teal: #2DD4A7;
+  --accent-red: #F2545B;
+
+  /* Typography scale */
+  --text-caption: 0.75rem;    /* 12px */
+  --text-body: 0.875rem;      /* 14px */
+  --text-body-lg: 1rem;       /* 16px */
+  --text-heading: 1.25rem;    /* 20px */
+  --text-title: 1.75rem;      /* 28px */
+
+  /* Spacing scale: 4 / 8 / 12 / 16 / 24 / 32 / 48 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* Radius */
+  --radius-card: 8px;
+  --radius-modal: 12px;
+  --radius-pill: 999px;
+
+  /* Elevation — borders for static surfaces, shadow only for floating elements */
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.24);
+
+  /* Motion */
+  --transition-standard: 140ms ease-out;
+}
+
+/* Light mode overrides */
+[data-theme="light"] {
+  --bg-canvas: #FAF9F6;
+  --bg-surface: #FFFFFF;
+  --bg-surface-raised: #F3F2EE;
+  --border-subtle: #E7E5DF;
+  --text-primary: #181812;
+  --text-secondary: #6B6A63;
+  --accent-ember: #E85A26;
+  --accent-ember-hover: #D04E1E;
+  --accent-ember-pressed: #C04318;
+  --accent-teal: #1FAE86;
+  --accent-red: #D93A41;
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* Reduced motion: degrade spring/scale effects to simple opacity fades */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 100ms !important;
+  }
+}
+
+/* ==========================================================================
+   Tailwind v4 Theme Inline — maps CSS variables to Tailwind utilities
+   ========================================================================== */
+
+@theme inline {
+  /* Fonts — mapped from next/font CSS variables */
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+
+  /* Colors */
+  --color-canvas: var(--bg-canvas);
+  --color-surface: var(--bg-surface);
+  --color-surface-raised: var(--bg-surface-raised);
+  --color-border-subtle: var(--border-subtle);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-accent-ember: var(--accent-ember);
+  --color-accent-ember-hover: var(--accent-ember-hover);
+  --color-accent-ember-pressed: var(--accent-ember-pressed);
+  --color-accent-teal: var(--accent-teal);
+  --color-accent-red: var(--accent-red);
+}
+
+/* ==========================================================================
+   Base Styles
+   ========================================================================== */
+
+html {
+  background-color: #14151A;
+  color: var(--text-primary);
+}
+
+body {
+  background-color: #14151A;
+  color: var(--text-primary);
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  font-size: var(--text-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.app-container {
+  background-color: #14151A;
+  border: none;
+  box-shadow: none;
+}
+
+/* Mono numerals — JetBrains Mono for all numeric data */
+.mono-num {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Scrollbar Styling (subtle, matches the dark aesthetic)
+   ========================================================================== */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* ==========================================================================
+   Focus styles — visible, accessible, on-brand
+   ========================================================================== */
+
+:focus-visible {
+  outline: 2px solid var(--accent-ember);
+  outline-offset: 2px;
+}
+
+input:focus,
+input:focus-visible {
+  outline: none !important;
+}
+
+/* ==========================================================================
+   GSAP initial states (to prevent layout flashing)
+   ========================================================================== */
+
+.gsap-init {
+  opacity: 0;
+}
+
+/* ==========================================================================
+   Capability Cards Custom Irregular Rotations and Hovers
+   ========================================================================== */
+
+.card-animation-target {
+  transition: transform 140ms ease-out, border-color 140ms ease-out;
+}
+
+.capability-card-0 {
+  transform: rotate(-2.6deg);
+}
+.capability-card-0:hover {
+  transform: rotate(-1deg) translateY(-2px);
+}
+
+.capability-card-1 {
+  transform: rotate(0.8deg);
+}
+.capability-card-1:hover {
+  transform: rotate(0.2deg) translateY(-2px);
+}
+
+.capability-card-2 {
+  transform: rotate(-1.7deg);
+}
+.capability-card-2:hover {
+  transform: rotate(-0.5deg) translateY(-2px);
+}
+
+.capability-card-3 {
+  transform: rotate(2.3deg);
+}
+.capability-card-3:hover {
+  transform: rotate(1deg) translateY(-2px);
+}
+
+/* ==========================================================================
+   Rotating Word Flatking-Inspired Stagger Animations
+   ========================================================================== */
+
+.word-cycler-container {
+  display: inline-block;
+  height: 1.2em;
+  line-height: 1.2em;
+  overflow: hidden;
+  position: relative;
+  vertical-align: middle;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.char-slot {
+  display: inline-block;
+  height: 1.2em;
+  line-height: 1.2em;
+  overflow: hidden;
+  position: relative;
+  vertical-align: top;
+}
+
+.char-line {
+  display: block;
+  height: 1.2em;
+  line-height: 1.2em;
+  font-style: italic;
+  color: var(--accent-ember);
+  transform: translateY(0%);
+}
+
+.char-line.first {
+  position: relative;
+  z-index: 5;
+}
+
+.char-line.second {
+  position: relative;
+  z-index: 1;
+}
+
+.trigger-slide .char-line {
+  transform: translateY(-100%);
+  transition: transform 0.25s cubic-bezier(0.65, 0, 0.21, 1.47);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .char-line.first {
+    opacity: 1;
+  }
+  .char-line.second {
+    opacity: 0;
+    position: absolute;
+    inset: 0;
+  }
+  
+  .trigger-slide .char-line.first {
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+  }
+  .trigger-slide .char-line.second {
+    opacity: 1;
+    transition: opacity 0.2s ease-in-out;
+  }
+  .trigger-slide .char-line {
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+/* ==========================================================================
+   Selection color
+   ========================================================================== */
+
+::selection {
+  background-color: var(--accent-ember);
+  color: var(--text-primary);
+}
