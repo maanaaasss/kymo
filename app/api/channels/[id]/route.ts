@@ -1,18 +1,17 @@
 import { NextRequest } from "next/server";
-import { db } from "@/lib/db";
-import { channels, videos } from "@/lib/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { proxyIfRemote } from "@/lib/proxy";
 
-/**
- * GET /api/channels/[id]?page=1&limit=30
- *
- * Returns paginated video listing for a channel from SQLite cache.
- * Uses Next.js 16 async params pattern.
- */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const proxied = await proxyIfRemote(request);
+  if (proxied) return proxied;
+
+  const { db } = await import("@/lib/db");
+  const { channels, videos } = await import("@/lib/db/schema");
+  const { eq, desc, sql } = await import("drizzle-orm");
+
   const { id } = await params;
 
   const searchParams = request.nextUrl.searchParams;
@@ -23,7 +22,6 @@ export async function GET(
   );
   const offset = (page - 1) * limit;
 
-  // Fetch the channel
   const channel = await db.query.channels.findFirst({
     where: eq(channels.id, id),
   });
@@ -35,7 +33,6 @@ export async function GET(
     );
   }
 
-  // Count total videos for this channel
   const countResult = db
     .select({ count: sql<number>`count(*)` })
     .from(videos)
@@ -44,7 +41,6 @@ export async function GET(
 
   const total = countResult?.count ?? 0;
 
-  // Fetch paginated videos, newest first
   const videoList = await db
     .select()
     .from(videos)

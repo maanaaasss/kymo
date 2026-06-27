@@ -1,16 +1,14 @@
-import { db } from "@/lib/db";
-import { downloadHistory } from "@/lib/db/schema";
-import { inArray } from "drizzle-orm";
+import { proxyIfRemote } from "@/lib/proxy";
+import { NextRequest } from "next/server";
 
-/**
- * GET /api/videos/downloaded?ids=abc,def,ghi
- *
- * Given a comma-separated list of video IDs, returns which ones
- * have been previously downloaded (exist in download_history).
- *
- * Response: { downloaded: Record<string, { kind: string; downloadedAt: string }> }
- */
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+  const proxied = await proxyIfRemote(request);
+  if (proxied) return proxied;
+
+  const { db } = await import("@/lib/db");
+  const { downloadHistory } = await import("@/lib/db/schema");
+  const { inArray } = await import("drizzle-orm");
+
   try {
     const { searchParams } = new URL(request.url);
     const idsParam = searchParams.get("ids");
@@ -31,18 +29,15 @@ export async function GET(request: Request) {
       return Response.json({ downloaded: {} });
     }
 
-    // Query download_history for these video IDs
     const rows = await db
       .select()
       .from(downloadHistory)
       .where(inArray(downloadHistory.videoId, ids));
 
-    // Build a lookup map: videoId → { kind, downloadedAt }
     const downloaded: Record<string, { kind: string; downloadedAt: string }> =
       {};
 
     for (const row of rows) {
-      // If a video has multiple downloads (video + audio), keep the most recent
       const existing = downloaded[row.videoId];
       if (
         !existing ||
@@ -62,7 +57,6 @@ export async function GET(request: Request) {
       err instanceof Error
         ? err.message
         : "Something went wrong checking download history";
-
     console.error("[GET /api/videos/downloaded]", err);
     return Response.json({ error: message }, { status: 500 });
   }

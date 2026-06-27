@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server";
-import { checkSystemHealth } from "@/lib/binary-check";
+import { proxyIfRemote } from "@/lib/proxy";
+import { NextRequest } from "next/server";
 
-/**
- * GET /api/health
- *
- * Checks system health: required binaries (yt-dlp, ffmpeg).
- * Used by the landing page on mount to show/hide the binary error banner.
- */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const proxied = await proxyIfRemote(request);
+  if (proxied) return proxied;
+
+  const { checkSystemHealth } = await import("@/lib/binary-check");
   const health = checkSystemHealth();
-
-  return NextResponse.json(health, {
-    status: health.healthy ? 200 : 503,
-  });
+  return NextResponse.json(health, { status: health.healthy ? 200 : 503 });
 }

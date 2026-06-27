@@ -1,83 +1,72 @@
-import { db } from "@/lib/db";
-import { channels, videos } from "@/lib/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
-import { notFound } from "next/navigation";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { ChannelHeader } from "@/components/channel/ChannelHeader";
 import { VideoGrid } from "@/components/channel/VideoGrid";
+import { Loader2 } from "lucide-react";
 
-interface PageProps {
-  params: Promise<{ id: string }>;
+interface ChannelData {
+  id: string;
+  title: string;
+  thumbnailUrl: string | null;
+  bannerUrl: string | null;
 }
 
-/**
- * Channel browsing page.
- *
- * Server component that pre-fetches the channel and first page of videos
- * from SQLite for instant load. Client-side VideoGrid handles pagination
- * via TanStack Query.
- */
-export default async function ChannelPage({ params }: PageProps) {
-  const { id } = await params;
+export default function ChannelPage() {
+  const { id } = useParams<{ id: string }>();
+  const [channel, setChannel] = useState<ChannelData | null>(null);
+  const [videoCount, setVideoCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Fetch channel from SQLite
-  const channel = await db.query.channels.findFirst({
-    where: eq(channels.id, id),
-  });
+  useEffect(() => {
+    async function fetchChannel() {
+      try {
+        const res = await fetch(`/api/channels/${id}?page=1&limit=1`);
+        if (!res.ok) {
+          setError("Channel not found");
+          return;
+        }
+        const data = await res.json();
+        setChannel(data.channel);
+        setVideoCount(data.pagination.total);
+      } catch {
+        setError("Failed to load channel");
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchChannel();
+  }, [id]);
 
-  if (!channel) {
-    notFound();
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-[var(--text-muted)]" />
+      </div>
+    );
   }
 
-  // Fetch first page of videos server-side
-  const countResult = db
-    .select({ count: sql<number>`count(*)` })
-    .from(videos)
-    .where(eq(videos.channelId, id))
-    .get();
-
-  const total = countResult?.count ?? 0;
-
-  const videoList = await db
-    .select()
-    .from(videos)
-    .where(eq(videos.channelId, id))
-    .orderBy(desc(videos.fetchedAt))
-    .limit(30)
-    .offset(0);
-
-  const initialData = {
-    channel: {
-      id: channel.id,
-      title: channel.title,
-      thumbnailUrl: channel.thumbnailUrl,
-      bannerUrl: channel.bannerUrl,
-    },
-    videos: videoList.map((v) => ({
-      id: v.id,
-      title: v.title,
-      durationSeconds: v.durationSeconds,
-      thumbnailUrl: v.thumbnailUrl,
-      publishedAt: v.publishedAt ? v.publishedAt.toISOString() : null,
-    })),
-    pagination: {
-      page: 1,
-      limit: 30,
-      total,
-      hasMore: 30 < total,
-    },
-  };
+  if (error || !channel) {
+    return (
+      <div className="flex flex-1 items-center justify-center py-20 text-[var(--text-muted)]">
+        {error ?? "Channel not found"}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col flex-1">
       <ChannelHeader
         title={channel.title}
-        videoCount={total}
+        videoCount={videoCount}
         thumbnailUrl={channel.thumbnailUrl}
         bannerUrl={channel.bannerUrl}
       />
 
       <main className="flex-1 mx-auto w-full max-w-[1200px] px-[var(--space-5)] py-[var(--space-5)]">
-        <VideoGrid channelId={id} channelTitle={channel.title} initialData={initialData} />
+        <VideoGrid channelId={id} channelTitle={channel.title} />
       </main>
     </div>
   );

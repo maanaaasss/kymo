@@ -1,13 +1,12 @@
 import { NextRequest } from "next/server";
-import { resolveUrl } from "@/lib/ytdlp";
+import { proxyIfRemote } from "@/lib/proxy";
 
-/**
- * POST /api/resolve-url
- *
- * Resolves a YouTube URL: detects type (video/channel/playlist),
- * fetches metadata via yt-dlp, caches to SQLite, returns result.
- */
 export async function POST(request: NextRequest) {
+  const proxied = await proxyIfRemote(request);
+  if (proxied) return proxied;
+
+  const { resolveUrl } = await import("@/lib/ytdlp");
+
   try {
     const body = await request.json();
     const { url } = body;
@@ -28,14 +27,12 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await resolveUrl(trimmedUrl);
-
     return Response.json(result);
   } catch (err) {
     const message =
       err instanceof Error
         ? err.message
         : "Something went wrong — try again in a moment";
-
     return Response.json({ error: message }, { status: 422 });
   }
 }

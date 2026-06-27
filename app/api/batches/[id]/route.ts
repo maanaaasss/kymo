@@ -1,19 +1,17 @@
-import { db } from "@/lib/db";
-import { batches, jobs } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { proxyIfRemote } from "@/lib/proxy";
+import { NextRequest } from "next/server";
 
-/**
- * GET /api/batches/[id]
- *
- * Returns the batch status and all its jobs.
- * Used by TanStack Query to poll download progress (Phase 4).
- *
- * Next.js 16: params is a Promise that must be awaited.
- */
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const proxied = await proxyIfRemote(request);
+  if (proxied) return proxied;
+
+  const { db } = await import("@/lib/db");
+  const { batches, jobs } = await import("@/lib/db/schema");
+  const { eq } = await import("drizzle-orm");
+
   try {
     const { id } = await params;
 
@@ -56,7 +54,6 @@ export async function GET(
       err instanceof Error
         ? err.message
         : "Something went wrong fetching batch status";
-
     console.error("[GET /api/batches/:id]", err);
     return Response.json({ error: message }, { status: 500 });
   }

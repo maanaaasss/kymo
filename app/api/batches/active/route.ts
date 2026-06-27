@@ -1,75 +1,66 @@
-import { db } from "@/lib/db";
-import { batches, jobs, videos } from "@/lib/db/schema";
-import { eq, or, desc } from "drizzle-orm";
+import { proxyIfRemote } from "@/lib/proxy";
+import { NextRequest } from "next/server";
 
-/**
- * Enrich a batch's jobs with video metadata.
- */
-async function enrichBatch(batch: {
-  id: string;
-  status: string;
-  totalJobs: number;
-  completedJobs: number;
-  createdAt: Date;
-}) {
-  const batchJobs = await db.query.jobs.findMany({
-    where: eq(jobs.batchId, batch.id),
-  });
+export async function GET(request: NextRequest) {
+  const proxied = await proxyIfRemote(request);
+  if (proxied) return proxied;
 
-  const enrichedJobs = [];
-  for (const job of batchJobs) {
-    let videoTitle = "Unknown video";
-    let videoThumbnail: string | null = null;
+  const { db } = await import("@/lib/db");
+  const { batches, jobs, videos } = await import("@/lib/db/schema");
+  const { eq, or, desc } = await import("drizzle-orm");
 
-    if (job.videoId) {
-      const video = await db.query.videos.findFirst({
-        where: eq(videos.id, job.videoId),
-      });
-      if (video) {
-        videoTitle = video.title;
-        videoThumbnail = video.thumbnailUrl;
+  async function enrichBatch(batch: {
+    id: string;
+    status: string;
+    totalJobs: number;
+    completedJobs: number;
+    createdAt: Date;
+  }) {
+    const batchJobs = await db.query.jobs.findMany({
+      where: eq(jobs.batchId, batch.id),
+    });
+
+    const enrichedJobs = [];
+    for (const job of batchJobs) {
+      let videoTitle = "Unknown video";
+      let videoThumbnail: string | null = null;
+
+      if (job.videoId) {
+        const video = await db.query.videos.findFirst({
+          where: eq(videos.id, job.videoId),
+        });
+        if (video) {
+          videoTitle = video.title;
+          videoThumbnail = video.thumbnailUrl;
+        }
       }
+
+      enrichedJobs.push({
+        id: job.id,
+        videoId: job.videoId,
+        videoTitle,
+        videoThumbnail,
+        kind: job.kind,
+        quality: job.quality,
+        status: job.status,
+        progressPct: job.progressPct,
+        error: job.error,
+      });
     }
 
-    enrichedJobs.push({
-      id: job.id,
-      videoId: job.videoId,
-      videoTitle,
-      videoThumbnail,
-      kind: job.kind,
-      quality: job.quality,
-      status: job.status,
-      progressPct: job.progressPct,
-      error: job.error,
-    });
+    return {
+      batch: {
+        id: batch.id,
+        status: batch.status,
+        totalJobs: batch.totalJobs,
+        completedJobs: batch.completedJobs,
+        createdAt: batch.createdAt,
+      },
+      jobs: enrichedJobs,
+    };
   }
 
-  return {
-    batch: {
-      id: batch.id,
-      status: batch.status,
-      totalJobs: batch.totalJobs,
-      completedJobs: batch.completedJobs,
-      createdAt: batch.createdAt,
-    },
-    jobs: enrichedJobs,
-  };
-}
-
-/**
- * GET /api/batches/active
- *
- * Returns all non-completed batches with their jobs and video metadata,
- * plus the most recently completed batch (for ZIP download).
- *
- * Response: {
- *   batches: Array<{ batch, jobs }>,
- *   recentCompleted: { batch, jobs } | null
- * }
- */
-export async function GET() {
   try {
-    // Fetch all active (non-terminal) batches
     const activeBatches = await db.query.batches.findMany({
       where: or(
         eq(batches.status, "pending"),
@@ -82,7 +73,6 @@ export async function GET() {
       result.push(await enrichBatch(batch));
     }
 
-    // Fetch the most recently completed/partial batch (for ZIP export)
     const recentDone = await db.query.batches.findFirst({
       where: or(
         eq(batches.status, "done"),
@@ -102,7 +92,6 @@ export async function GET() {
       err instanceof Error
         ? err.message
         : "Something went wrong fetching active downloads";
-
     console.error("[GET /api/batches/active]", err);
     return Response.json({ error: message }, { status: 500 });
   }

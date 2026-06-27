@@ -1,25 +1,20 @@
-import { db } from "@/lib/db";
-import { batches, jobs } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
-import * as archiver from "archiver";
-import fs from "fs";
-import path from "path";
+import { proxyIfRemote } from "@/lib/proxy";
+import { NextRequest } from "next/server";
 
-/**
- * GET /api/batches/[id]/zip
- *
- * Streams all completed files from a batch as a ZIP archive.
- * Uses archiver for streaming (never buffers the entire archive in memory).
- *
- * Only works for batches with status "done" or "partial".
- * Files are organized inside the ZIP as: {video_title}.{ext}
- *
- * Next.js 16: params is a Promise that must be awaited.
- */
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const proxied = await proxyIfRemote(request);
+  if (proxied) return proxied;
+
+  const { db } = await import("@/lib/db");
+  const { batches, jobs } = await import("@/lib/db/schema");
+  const { eq } = await import("drizzle-orm");
+  const archiver = await import("archiver");
+  const fs = await import("fs");
+  const path = await import("path");
+
   try {
     const { id } = await params;
 
@@ -44,7 +39,6 @@ export async function GET(
       );
     }
 
-    // Get all completed jobs with output paths
     const batchJobs = await db.query.jobs.findMany({
       where: eq(jobs.batchId, id),
     });
@@ -60,14 +54,12 @@ export async function GET(
       );
     }
 
-    // Verify files exist on disk
     const filesToZip: Array<{ filePath: string; archiveName: string }> = [];
 
     for (const job of completedJobs) {
       const outputPath = job.outputPath!;
 
       if (fs.existsSync(outputPath)) {
-        // Use just the filename inside the ZIP (flat structure)
         const archiveName = path.basename(outputPath);
         filesToZip.push({ filePath: outputPath, archiveName });
       } else {
@@ -87,10 +79,8 @@ export async function GET(
       );
     }
 
-    // Create a streaming ZIP archive
     const archive = new archiver.ZipArchive({ zlib: { level: 6 } });
 
-    // Set response headers for ZIP download
     const headers = new Headers();
     headers.set("Content-Type", "application/zip");
     headers.set(
@@ -98,7 +88,6 @@ export async function GET(
       `attachment; filename="kymo-batch-${id.slice(0, 8)}.zip"`
     );
 
-    // Create a ReadableStream from archiver events
     const stream = new ReadableStream({
       start(controller) {
         archive.on("data", (chunk: Buffer) => {
@@ -107,7 +96,6 @@ export async function GET(
 
         archive.on("end", () => {
           controller.close();
-          // Clean up files shortly after zipping finishes to ensure buffers flush
           setTimeout(() => {
             deleteBatchFiles(filesToZip);
           }, 3000);
@@ -118,7 +106,6 @@ export async function GET(
           controller.error(err);
         });
 
-        // Add all files to the archive
         for (const { filePath, archiveName } of filesToZip) {
           archive.file(filePath, { name: archiveName });
         }
@@ -137,51 +124,44 @@ export async function GET(
       err instanceof Error
         ? err.message
         : "Something went wrong creating the ZIP export";
-
     console.error("[GET /api/batches/:id/zip]", err);
     return Response.json({ error: message }, { status: 500 });
   }
 }
 
-/**
- * Deletes files from disk after they've been packaged into a ZIP.
- * If a channel folder is left empty or only contains channel artwork, it is also cleaned up.
- */
 function deleteBatchFiles(files: Array<{ filePath: string }>) {
   console.log(`[ZIP] Cleaning up ${files.length} files from disk...`);
   const uniqueDirs = new Set<string>();
 
   for (const { filePath } of files) {
     try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+      if (require("fs").existsSync(filePath)) {
+        require("fs").unlinkSync(filePath);
         console.log(`[ZIP] Deleted temp file: ${filePath}`);
       }
-      uniqueDirs.add(path.dirname(filePath));
+      uniqueDirs.add(require("path").dirname(filePath));
     } catch (err) {
       console.error(`[ZIP] Error deleting file ${filePath}:`, err);
     }
   }
 
-  // Check if directories are empty now and clean them up
   for (const dir of uniqueDirs) {
     try {
-      if (fs.existsSync(dir)) {
-        const remaining = fs.readdirSync(dir);
-        // If empty or only contains channel profile / banner images, delete them and the directory
+      if (require("fs").existsSync(dir)) {
+        const remaining = require("fs").readdirSync(dir);
         const isMetadataFile = (name: string) =>
           name.startsWith("channel_profile") || name.startsWith("channel_banner");
 
         if (remaining.every(isMetadataFile)) {
           for (const item of remaining) {
-            fs.unlinkSync(path.join(dir, item));
+            require("fs").unlinkSync(require("path").join(dir, item));
           }
-          fs.rmdirSync(dir);
+          require("fs").rmdirSync(dir);
           console.log(`[ZIP] Cleaned up channel directory: ${dir}`);
         }
       }
     } catch (err) {
-      console.error(`[ZIP] Error cleaning up directory ${dir}:`, err);
+      console.error(`[ZIP] Error cleaning up directory:`, err);
     }
   }
 }

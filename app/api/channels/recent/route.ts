@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { channels } from "@/lib/db/schema";
-import { desc } from "drizzle-orm";
+import { proxyIfRemote } from "@/lib/proxy";
+import { NextRequest } from "next/server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const proxied = await proxyIfRemote(request);
+  if (proxied) return proxied;
+
+  const { db } = await import("@/lib/db");
+  const { channels } = await import("@/lib/db/schema");
+  const { desc } = await import("drizzle-orm");
+
   try {
     const list = await db
       .select({

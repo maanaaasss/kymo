@@ -1,27 +1,17 @@
 import { NextRequest } from "next/server";
-import { db } from "@/lib/db";
-import { batches, jobs } from "@/lib/db/schema";
+import { proxyIfRemote } from "@/lib/proxy";
 
-/**
- * POST /api/batches
- *
- * Creates a download batch from the basket.
- * Inserts 1 batch row + N job rows (one per video) in a single transaction.
- * Returns immediately — no yt-dlp work happens here.
- *
- * Request body:
- *   videos: Array<{ id, title, channelId, channelTitle }>
- *   config: { kind, quality, includeThumbnail, includeMetadata }
- *
- * Response:
- *   { batchId, totalJobs }
- */
 export async function POST(request: NextRequest) {
+  const proxied = await proxyIfRemote(request);
+  if (proxied) return proxied;
+
+  const { db } = await import("@/lib/db");
+  const { batches, jobs } = await import("@/lib/db/schema");
+
   try {
     const body = await request.json();
     const { videos, config } = body;
 
-    // Validate videos array
     if (!Array.isArray(videos) || videos.length === 0) {
       return Response.json(
         { error: "Select at least one video to download" },
@@ -29,7 +19,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate config
     if (
       !config ||
       !config.kind ||
@@ -45,7 +34,6 @@ export async function POST(request: NextRequest) {
     const batchId = crypto.randomUUID();
     const now = new Date();
 
-    // Single transaction: create batch + all jobs atomically
     const jobRows = videos.map(
       (video: { id: string; title: string; channelId: string }) => ({
         id: crypto.randomUUID(),
@@ -61,16 +49,16 @@ export async function POST(request: NextRequest) {
       })
     );
 
-    // Use Drizzle's transaction for atomicity
-    // Note: better-sqlite3 driver is synchronous — use .run() to execute queries
     db.transaction((tx) => {
-      tx.insert(batches).values({
-        id: batchId,
-        status: "pending",
-        totalJobs: videos.length,
-        completedJobs: 0,
-        createdAt: now,
-      }).run();
+      tx.insert(batches)
+        .values({
+          id: batchId,
+          status: "pending",
+          totalJobs: videos.length,
+          completedJobs: 0,
+          createdAt: now,
+        })
+        .run();
 
       for (const job of jobRows) {
         tx.insert(jobs).values(job).run();
@@ -83,7 +71,6 @@ export async function POST(request: NextRequest) {
       err instanceof Error
         ? err.message
         : "Something went wrong creating the batch — try again";
-
     console.error("[POST /api/batches]", err);
     return Response.json({ error: message }, { status: 500 });
   }
