@@ -7,18 +7,30 @@
    ========================================================================== */
 
 :root {
-  /* Colors — Dark (default) */
-  --bg-canvas: #14151A;
-  --bg-surface: #1C1D24;
-  --bg-surface-raised: #23242C;
-  --border-subtle: #2A2B33;
-  --text-primary: #F3F2EE;
-  --text-secondary: #9A9AA2;
-  --accent-ember: #FF6B35;
-  --accent-ember-hover: #FF8A5C;
-  --accent-ember-pressed: #E55A28;
+  /* surfaces */
+  --bg-canvas: #18140F;
+  --bg-surface: #211C16;
+  --bg-surface-raised: #25201A;
+
+  /* borders */
+  --border-default: #332C22;
+  --border-subtle: #332C22;   /* mapped to border-default for backwards compatibility */
+  --border-strong: #443C30;   /* hover, focus, active dividers */
+
+  /* text */
+  --text-primary: #F2ECE2;
+  --text-secondary: #9C9286;
+  --text-quiet: #6E665B;
+
+  /* accent + status */
+  --accent: #E2692F;          /* the one accent color in the app */
+  --accent-ember: var(--accent);
+  --accent-ember-hover: #F27650;
+  --accent-ember-pressed: #C4421B;
   --accent-teal: #2DD4A7;
   --accent-red: #F2545B;
+  --success: #2DD4A7;
+  --error: #F2545B;
 
   /* Typography scale */
   --text-caption: 0.75rem;    /* 12px */
@@ -46,6 +58,10 @@
 
   /* Motion */
   --transition-standard: 140ms ease-out;
+  
+  /* Type definitions */
+  --font-ui: var(--font-ui, 'Inter', sans-serif);
+  --font-mono: var(--font-mono, 'JetBrains Mono', monospace);
 }
 
 /* Light mode overrides */
@@ -53,10 +69,14 @@
   --bg-canvas: #FAF9F6;
   --bg-surface: #FFFFFF;
   --bg-surface-raised: #F3F2EE;
+  --border-default: #E7E5DF;
   --border-subtle: #E7E5DF;
+  --border-strong: #D1CFCA;
   --text-primary: #181812;
   --text-secondary: #6B6A63;
-  --accent-ember: #E85A26;
+  --text-quiet: #8A887E;
+  --accent: #E85A26;
+  --accent-ember: var(--accent);
   --accent-ember-hover: #D04E1E;
   --accent-ember-pressed: #C04318;
   --accent-teal: #1FAE86;
@@ -81,16 +101,20 @@
 
 @theme inline {
   /* Fonts — mapped from next/font CSS variables */
-  --font-sans: var(--font-inter);
-  --font-mono: var(--font-jetbrains-mono);
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-mono);
 
   /* Colors */
   --color-canvas: var(--bg-canvas);
   --color-surface: var(--bg-surface);
   --color-surface-raised: var(--bg-surface-raised);
   --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
+  --color-text-quiet: var(--text-quiet);
+  --color-accent: var(--accent);
   --color-accent-ember: var(--accent-ember);
   --color-accent-ember-hover: var(--accent-ember-hover);
   --color-accent-ember-pressed: var(--accent-ember-pressed);
@@ -103,14 +127,14 @@
    ========================================================================== */
 
 html {
-  background-color: #14151A;
+  background-color: var(--bg-canvas);
   color: var(--text-primary);
 }
 
 body {
-  background-color: #14151A;
+  background-color: var(--bg-canvas);
   color: var(--text-primary);
-  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-ui), system-ui, -apple-system, sans-serif;
   font-size: var(--text-body);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -118,14 +142,14 @@ body {
 }
 
 .app-container {
-  background-color: #14151A;
+  background-color: var(--bg-canvas);
   border: none;
   box-shadow: none;
 }
 
 /* Mono numerals — JetBrains Mono for all numeric data */
 .mono-num {
-  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-family: var(--font-mono), ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
 
@@ -173,6 +197,11 @@ input:focus-visible {
   opacity: 0;
 }
 
+.gsap-init.card-animation-target {
+  opacity: 0;
+  transform: scale(0.9) rotate(0deg);
+}
+
 /* ==========================================================================
    Capability Cards Custom Irregular Rotations and Hovers
    ========================================================================== */
@@ -183,31 +212,31 @@ input:focus-visible {
 }
 
 .capability-card-0 {
-  transform: rotate(-2.6deg);
+  transform: rotate(-2deg);
 }
 .capability-card-0:hover {
-  transform: rotate(-1deg) translateY(-2px);
+  transform: rotate(-1.6deg) translateY(-3px);
 }
 
 .capability-card-1 {
-  transform: rotate(0.8deg);
+  transform: rotate(1.5deg);
 }
 .capability-card-1:hover {
-  transform: rotate(0.2deg) translateY(-2px);
+  transform: rotate(1.2deg) translateY(-3px);
 }
 
 .capability-card-2 {
-  transform: rotate(-1.7deg);
+  transform: rotate(1deg);
 }
 .capability-card-2:hover {
-  transform: rotate(-0.5deg) translateY(-2px);
+  transform: rotate(0.8deg) translateY(-3px);
 }
 
 .capability-card-3 {
-  transform: rotate(2.3deg);
+  transform: rotate(-1.5deg);
 }
 .capability-card-3:hover {
-  transform: rotate(1deg) translateY(-2px);
+  transform: rotate(-1.2deg) translateY(-3px);
 }
 
 /* ==========================================================================

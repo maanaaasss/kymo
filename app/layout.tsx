@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { LenisProvider } from "@/components/providers/LenisProvider";
@@ -8,13 +9,13 @@ import { QueuedToast } from "@/components/download/QueuedToast";
 import "./globals.css";
 
 const inter = Inter({
-  variable: "--font-inter",
+  variable: "--font-ui",
   subsets: ["latin"],
   display: "swap",
 });
 
 const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
+  variable: "--font-mono",
   subsets: ["latin"],
   display: "swap",
 });
@@ -79,7 +80,7 @@ export default function RootLayout({
       data-theme="dark"
       className={`${inter.variable} ${jetbrainsMono.variable}`}
     >
-      <body className="min-h-dvh flex flex-col bg-[#14151A] text-[var(--text-primary)] relative">
+      <body className="min-h-dvh flex flex-col bg-[var(--bg-canvas)] text-[var(--text-primary)] relative">
         <svg 
           style={{
             position: "absolute",
@@ -102,7 +103,9 @@ export default function RootLayout({
             {children}
           </LenisProvider>
           <DownloadProgress />
-          <BasketDock />
+          <Suspense fallback={null}>
+            <BasketDock />
+          </Suspense>
           <QueuedToast />
         </QueryProvider>
       </body>

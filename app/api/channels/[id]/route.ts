@@ -10,7 +10,7 @@ export async function GET(
 
   const { db } = await import("@/lib/db");
   const { channels, videos } = await import("@/lib/db/schema");
-  const { eq, desc, sql } = await import("drizzle-orm");
+  const { eq, desc, sql, and } = await import("drizzle-orm");
 
   const { id } = await params;
 
@@ -21,6 +21,7 @@ export async function GET(
     Math.max(1, parseInt(searchParams.get("limit") || "30", 10))
   );
   const offset = (page - 1) * limit;
+  const tab = searchParams.get("tab") || "videos";
 
   const channel = await db.query.channels.findFirst({
     where: eq(channels.id, id),
@@ -33,10 +34,22 @@ export async function GET(
     );
   }
 
+  // 1. Calculate which tabs are non-empty for this channel
+  const tabsResult = await db
+    .select({ tab: videos.tab, count: sql<number>`count(*)` })
+    .from(videos)
+    .where(eq(videos.channelId, id))
+    .groupBy(videos.tab);
+
+  const availableTabs = tabsResult
+    .filter((t) => t.count > 0)
+    .map((t) => t.tab);
+
+  // 2. Fetch total and videos filtered by the selected tab
   const countResult = db
     .select({ count: sql<number>`count(*)` })
     .from(videos)
-    .where(eq(videos.channelId, id))
+    .where(and(eq(videos.channelId, id), eq(videos.tab, tab)))
     .get();
 
   const total = countResult?.count ?? 0;
@@ -44,7 +57,7 @@ export async function GET(
   const videoList = await db
     .select()
     .from(videos)
-    .where(eq(videos.channelId, id))
+    .where(and(eq(videos.channelId, id), eq(videos.tab, tab)))
     .orderBy(desc(videos.fetchedAt))
     .limit(limit)
     .offset(offset);
@@ -55,6 +68,10 @@ export async function GET(
       title: channel.title,
       thumbnailUrl: channel.thumbnailUrl,
       bannerUrl: channel.bannerUrl,
+      handle: (channel as any).handle,
+      subscriberCount: (channel as any).subscriberCount,
+      description: (channel as any).description,
+      verified: !!(channel as any).verified,
     },
     videos: videoList.map((v) => ({
       id: v.id,
@@ -63,6 +80,7 @@ export async function GET(
       thumbnailUrl: v.thumbnailUrl,
       publishedAt: v.publishedAt,
     })),
+    availableTabs: availableTabs.length > 0 ? availableTabs : ["videos"],
     pagination: {
       page,
       limit,

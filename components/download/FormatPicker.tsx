@@ -1,31 +1,19 @@
 "use client";
 
-import { Video, Music } from "lucide-react";
-import type {
-  DownloadConfig,
-  DownloadKind,
-} from "@/lib/types/download";
+import { DownloadConfig, DownloadKind } from "@/lib/types/download";
 import { VIDEO_QUALITIES, AUDIO_FORMATS } from "@/lib/types/download";
+import { ToggleSwitch } from "@/components/download/ToggleSwitch";
 
 interface FormatPickerProps {
   config: DownloadConfig;
   onChange: (config: DownloadConfig) => void;
 }
 
-/**
- * Format picker — video/audio toggle + quality/format selector + options.
- *
- * Two-segment pill toggle (Linear-style, not default shadcn).
- * Video: show quality dropdown (1080p, 720p, 480p, best).
- * Audio: show format dropdown (mp3, m4a, opus).
- * Checkboxes for include thumbnail / include metadata.
- */
 export function FormatPicker({ config, onChange }: FormatPickerProps) {
   const setKind = (kind: DownloadKind) => {
     onChange({
       ...config,
       kind,
-      // Reset quality to sensible default when switching kind
       quality: kind === "video" ? "1080p" : "mp3",
     });
   };
@@ -48,7 +36,7 @@ export function FormatPicker({ config, onChange }: FormatPickerProps) {
           <button
             onClick={() => setKind("video")}
             className={`
-              flex items-center gap-[var(--space-1)] px-[var(--space-3)] py-[5px]
+              px-[var(--space-3)] py-[5px]
               rounded-[6px] text-[var(--text-body)] font-medium
               transition-all duration-[140ms] ease-out cursor-pointer
               ${
@@ -58,13 +46,12 @@ export function FormatPicker({ config, onChange }: FormatPickerProps) {
               }
             `}
           >
-            <Video size={14} />
             Video
           </button>
           <button
             onClick={() => setKind("audio")}
             className={`
-              flex items-center gap-[var(--space-1)] px-[var(--space-3)] py-[5px]
+              px-[var(--space-3)] py-[5px]
               rounded-[6px] text-[var(--text-body)] font-medium
               transition-all duration-[140ms] ease-out cursor-pointer
               ${
@@ -74,7 +61,6 @@ export function FormatPicker({ config, onChange }: FormatPickerProps) {
               }
             `}
           >
-            <Music size={14} />
             Audio
           </button>
         </div>
@@ -86,12 +72,18 @@ export function FormatPicker({ config, onChange }: FormatPickerProps) {
           className="
             mono-num appearance-none bg-[var(--bg-surface-raised)]
             border border-[var(--border-subtle)] rounded-[var(--radius-card)]
-            px-[var(--space-3)] py-[5px] text-[var(--text-body)]
+            pl-[var(--space-3)] pr-[28px] py-[5px] text-[var(--text-body)]
             text-[var(--text-primary)] cursor-pointer
             transition-colors duration-[140ms] ease-out
             hover:border-[var(--text-secondary)]/40
             focus:outline-none focus:ring-2 focus:ring-[var(--accent-ember)] focus:ring-offset-0
           "
+          style={{
+            backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%239C9286' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
+            backgroundRepeat: "no-repeat",
+            backgroundPosition: "right 8px center",
+            backgroundSize: "14px",
+          }}
         >
           {qualities.map((q) => (
             <option key={q} value={q}>
@@ -103,43 +95,16 @@ export function FormatPicker({ config, onChange }: FormatPickerProps) {
 
       {/* Options row — include thumbnail / metadata */}
       <div className="flex items-center gap-[var(--space-4)]">
-        <label className="flex items-center gap-[var(--space-2)] text-[var(--text-caption)] text-[var(--text-secondary)] cursor-pointer select-none group">
-          <input
-            type="checkbox"
-            checked={config.includeThumbnail}
-            onChange={(e) => setOption("includeThumbnail", e.target.checked)}
-            className="
-              w-[14px] h-[14px] rounded-[3px]
-              border border-[var(--border-subtle)]
-              bg-[var(--bg-surface-raised)]
-              accent-[var(--accent-ember)]
-              cursor-pointer
-              transition-colors duration-[140ms] ease-out
-            "
-          />
-          <span className="transition-colors duration-[140ms] ease-out group-hover:text-[var(--text-primary)]">
-            Include thumbnail
-          </span>
-        </label>
-
-        <label className="flex items-center gap-[var(--space-2)] text-[var(--text-caption)] text-[var(--text-secondary)] cursor-pointer select-none group">
-          <input
-            type="checkbox"
-            checked={config.includeMetadata}
-            onChange={(e) => setOption("includeMetadata", e.target.checked)}
-            className="
-              w-[14px] h-[14px] rounded-[3px]
-              border border-[var(--border-subtle)]
-              bg-[var(--bg-surface-raised)]
-              accent-[var(--accent-ember)]
-              cursor-pointer
-              transition-colors duration-[140ms] ease-out
-            "
-          />
-          <span className="transition-colors duration-[140ms] ease-out group-hover:text-[var(--text-primary)]">
-            Include metadata
-          </span>
-        </label>
+        <ToggleSwitch
+          checked={config.includeThumbnail}
+          onChange={(v) => setOption("includeThumbnail", v)}
+          label="Include thumbnail"
+        />
+        <ToggleSwitch
+          checked={config.includeMetadata}
+          onChange={(v) => setOption("includeMetadata", v)}
+          label="Include metadata"
+        />
       </div>
     </div>
   );

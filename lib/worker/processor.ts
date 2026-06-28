@@ -120,6 +120,53 @@ async function downloadWithRetry(
     }
 
     try {
+      const job = await db.query.jobs.findFirst({
+        where: eq(jobs.id, jobId),
+      });
+
+      if (!job) {
+        throw new Error("Job not found in database");
+      }
+
+      if (job.kind === "image") {
+        const meta = JSON.parse(job.quality || "{}");
+        const imageUrl = meta.url;
+        const imageType = meta.type || "avatar";
+        const channelTitle = meta.channelTitle || "Unknown Channel";
+
+        const channelDir = path.join(DOWNLOADS_ROOT, sanitizeFilename(channelTitle));
+        fs.mkdirSync(channelDir, { recursive: true });
+
+        const ext = getUrlExtension(imageUrl);
+        const filename = `${sanitizeFilename(channelTitle)}_${imageType}.${ext}`;
+        const actualPath = path.join(channelDir, filename);
+
+        console.log(`[worker] Downloading image: ${imageUrl} -> ${actualPath}`);
+        await downloadFile(imageUrl, actualPath);
+
+        const finishedAt = new Date();
+        await db
+          .update(jobs)
+          .set({
+            status: "done",
+            progressPct: 100,
+            outputPath: actualPath,
+            finishedAt,
+          })
+          .where(eq(jobs.id, jobId))
+          .run();
+
+        // Increment completedJobs
+        await db
+          .update(batches)
+          .set({ completedJobs: sql`${batches.completedJobs} + 1` })
+          .where(eq(batches.id, batchId))
+          .run();
+
+        await checkBatchCompletion(batchId);
+        return;
+      }
+
       // 3. Look up video metadata
       const video = await db.query.videos.findFirst({
         where: eq(videos.id, videoId),
@@ -178,15 +225,6 @@ async function downloadWithRetry(
         channelDir,
         sanitizeFilename(video.title)
       );
-
-      // Fetch the job to get download config
-      const job = await db.query.jobs.findFirst({
-        where: eq(jobs.id, jobId),
-      });
-
-      if (!job) {
-        throw new Error("Job disappeared during processing");
-      }
 
       // 5. Build yt-dlp arguments
       const args = buildYtDlpArgs(

@@ -47,6 +47,8 @@ export interface YtDlpFullVideo {
   description?: string;
   categories?: string[];
   tags?: string[];
+  channel_follower_count?: number;
+  channel_is_verified?: boolean;
 }
 
 /** The type of URL resolved by yt-dlp */
@@ -60,4 +62,5 @@ export interface ResolvedUrl {
   channelThumbnail: string | null;
   channelBanner?: string | null;
   videoCount: number;
+  videoId?: string | null;
 }

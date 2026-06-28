@@ -42,7 +42,11 @@ function initializeDatabase() {
       title TEXT NOT NULL,
       thumbnail_url TEXT,
       banner_url TEXT,
-      fetched_at INTEGER NOT NULL
+      fetched_at INTEGER NOT NULL,
+      handle TEXT,
+      subscriber_count INTEGER,
+      description TEXT,
+      verified INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS videos (
@@ -53,7 +57,9 @@ function initializeDatabase() {
       thumbnail_url TEXT,
       published_at INTEGER,
       available_formats TEXT,
-      fetched_at INTEGER NOT NULL
+      fetched_at INTEGER NOT NULL,
+      tab TEXT NOT NULL DEFAULT 'videos',
+      view_count INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS batches (
@@ -87,6 +93,26 @@ function initializeDatabase() {
       PRIMARY KEY (video_id, kind)
     );
   `);
+
+  // Migrate existing databases to add 'tab' column if missing
+  try {
+    sqlite.exec("ALTER TABLE videos ADD COLUMN tab TEXT NOT NULL DEFAULT 'videos'");
+  } catch {
+    // Ignore error if column already exists
+  }
+
+  // Migrate existing databases to add 'view_count' column if missing
+  try {
+    sqlite.exec("ALTER TABLE videos ADD COLUMN view_count INTEGER");
+  } catch {
+    // Ignore error if column already exists
+  }
+
+  // Migrate existing databases for rich channel fields
+  try { sqlite.exec("ALTER TABLE channels ADD COLUMN handle TEXT"); } catch {}
+  try { sqlite.exec("ALTER TABLE channels ADD COLUMN subscriber_count INTEGER"); } catch {}
+  try { sqlite.exec("ALTER TABLE channels ADD COLUMN description TEXT"); } catch {}
+  try { sqlite.exec("ALTER TABLE channels ADD COLUMN verified INTEGER DEFAULT 0"); } catch {}
 }
 
 // Auto-initialize on first import

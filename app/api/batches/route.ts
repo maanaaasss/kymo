@@ -35,14 +35,28 @@ export async function POST(request: NextRequest) {
     const now = new Date();
 
     const jobRows = videos.map(
-      (video: { id: string; title: string; channelId: string }) => ({
+      (video: {
+        id: string;
+        title: string;
+        channelId: string;
+        channelTitle?: string;
+        kind?: string;
+        imageUrl?: string;
+        imageType?: string;
+      }) => ({
         id: crypto.randomUUID(),
         batchId,
-        videoId: video.id,
-        kind: config.kind as "video" | "audio",
-        quality: config.quality as string,
-        includeThumbnail: config.includeThumbnail ?? false,
-        includeMetadata: config.includeMetadata ?? false,
+        videoId: video.kind === "image" ? null : video.id,
+        kind: (video.kind === "image" ? "image" : config.kind) as "video" | "audio" | "image",
+        quality: video.kind === "image"
+          ? JSON.stringify({
+              url: video.imageUrl,
+              type: video.imageType,
+              channelTitle: video.channelTitle || "Unknown Channel",
+            })
+          : (config.quality as string),
+        includeThumbnail: video.kind === "image" ? false : config.includeThumbnail ?? false,
+        includeMetadata: video.kind === "image" ? false : config.includeMetadata ?? false,
         status: "pending" as const,
         progressPct: 0,
         createdAt: now,

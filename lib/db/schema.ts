@@ -10,6 +10,10 @@ export const channels = sqliteTable("channels", {
   thumbnailUrl: text("thumbnail_url"),
   bannerUrl: text("banner_url"),
   fetchedAt: integer("fetched_at", { mode: "timestamp" }).notNull(),
+  handle: text("handle"),
+  subscriberCount: integer("subscriber_count"),
+  description: text("description"),
+  verified: integer("verified").default(0),
 });
 
 /**
@@ -26,6 +30,8 @@ export const videos = sqliteTable("videos", {
   /** JSON blob from yt-dlp -F, cached for format picker */
   availableFormats: text("available_formats"),
   fetchedAt: integer("fetched_at", { mode: "timestamp" }).notNull(),
+  tab: text("tab").notNull().default("videos"),
+  viewCount: integer("view_count"),
 });
 
 /**
@@ -51,7 +57,7 @@ export const jobs = sqliteTable("jobs", {
   id: text("id").primaryKey(),
   batchId: text("batch_id").references(() => batches.id),
   videoId: text("video_id").references(() => videos.id),
-  kind: text("kind", { enum: ["video", "audio"] }).notNull(),
+  kind: text("kind", { enum: ["video", "audio", "image"] }).notNull(),
   quality: text("quality"),
   includeThumbnail: integer("include_thumbnail", { mode: "boolean" })
     .notNull()

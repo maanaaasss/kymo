@@ -41,7 +41,7 @@ export const PRESETS: Preset[] = [
   {
     id: "reference",
     name: "Reference",
-    description: "1080p video with thumbnail and metadata",
+    description: "HD video with thumbnail and metadata",
     config: {
       kind: "video",
       quality: "1080p",
@@ -79,6 +79,6 @@ export const PRESETS: Preset[] = [
 export const DEFAULT_CONFIG: DownloadConfig = {
   kind: "video",
   quality: "1080p",
-  includeThumbnail: false,
+  includeThumbnail: true,
   includeMetadata: false,
 };

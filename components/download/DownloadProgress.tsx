@@ -73,17 +73,19 @@ export function DownloadProgress() {
   useEffect(() => {
     if (batches.length > 0) {
       const ids = batches.map((b) => b.batch.id);
-      setSeenActiveBatchIds((prev) => {
-        const next = [...prev];
-        let changed = false;
-        ids.forEach((id) => {
-          if (!next.includes(id)) {
-            next.push(id);
-            changed = true;
-          }
+      setTimeout(() => {
+        setSeenActiveBatchIds((prev) => {
+          const next = [...prev];
+          let changed = false;
+          ids.forEach((id) => {
+            if (!next.includes(id)) {
+              next.push(id);
+              changed = true;
+            }
+          });
+          return changed ? next : prev;
         });
-        return changed ? next : prev;
-      });
+      }, 0);
     }
   }, [batches]);
 

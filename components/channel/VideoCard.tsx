@@ -52,12 +52,12 @@ interface VideoCardProps {
   isSelected?: boolean;
   isDownloaded?: boolean;
   onSelect?: (shiftKey: boolean) => void;
+  uploadIndex?: number;
 }
 
 /**
- * Video card — compact, Raycast-inspired.
- * Thumbnail with duration badge, 2-line title, published date.
- * Selection state: ember ring + check icon. Hover: plus icon overlay.
+ * Video card — styled to match the home page's capability cards (dark canvas, border, no shadow).
+ * Thumbnail with duration badge, frame index, selection indicator, and download status.
  */
 export function VideoCard({
   title,
@@ -67,6 +67,7 @@ export function VideoCard({
   isSelected = false,
   isDownloaded = false,
   onSelect,
+  uploadIndex,
 }: VideoCardProps) {
   const relativeDate = formatRelativeDate(publishedAt);
   const [imgError, setImgError] = useState(false);
@@ -80,18 +81,51 @@ export function VideoCard({
     <div
       onClick={handleClick}
       className={`
-        group relative rounded-[var(--radius-card)]
+        group relative rounded-[12px] select-none overflow-hidden box-border
         transition-all duration-[140ms] ease-out
-        p-[var(--space-2)] cursor-pointer
+        p-[8px] sm:p-[12px] cursor-pointer
+        flex flex-row sm:flex-col items-center sm:items-stretch gap-3 sm:gap-0
+        border
         ${
           isSelected
-            ? "bg-[var(--accent-ember)]/8 ring-2 ring-[var(--accent-ember)] ring-offset-0"
-            : "hover:bg-[var(--bg-surface-raised)]"
+            ? "border-[var(--accent-ember)] bg-[var(--accent-ember)]/8"
+            : "border-transparent bg-transparent"
         }
       `}
+      style={{ boxShadow: "none" }}
     >
-      {/* Thumbnail */}
-      <div className="relative aspect-video rounded-[6px] overflow-hidden bg-[var(--bg-surface-raised)]">
+      {/* Viewfinder corner marks on all four corners of card when selected */}
+      {isSelected && (
+        <>
+          <svg 
+            className="absolute top-2 left-2 text-[var(--accent-ember)] pointer-events-none z-20"
+            width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+          >
+            <path d="M1 6V1H6" />
+          </svg>
+          <svg 
+            className="absolute top-2 right-2 text-[var(--accent-ember)] pointer-events-none z-20"
+            width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+          >
+            <path d="M7 6V1H2" />
+          </svg>
+          <svg 
+            className="absolute bottom-2 left-2 text-[var(--accent-ember)] pointer-events-none z-20"
+            width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+          >
+            <path d="M1 2V7H6" />
+          </svg>
+          <svg 
+            className="absolute bottom-2 right-2 text-[var(--accent-ember)] pointer-events-none z-20"
+            width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+          >
+            <path d="M7 2V7H2" />
+          </svg>
+        </>
+      )}
+
+      {/* Thumbnail container */}
+      <div className="relative aspect-video rounded-[6px] overflow-hidden bg-[var(--bg-surface-raised)] z-10 w-[110px] sm:w-full shrink-0 sm:shrink">
         {thumbnailUrl && !imgError ? (
           <img
             src={thumbnailUrl}
@@ -118,17 +152,24 @@ export function VideoCard({
           </div>
         )}
 
-        {/* Selection overlay icon — Raycast quick-action pattern */}
+        {/* Frame-index number — top-left corner */}
+        {uploadIndex !== undefined && (
+          <span className="absolute top-[var(--space-1)] left-[var(--space-1)] font-mono text-[9px] font-medium text-white bg-black/60 px-[5px] py-[3px] rounded-[3px] leading-none inline-block select-none z-10">
+            {uploadIndex.toString().padStart(3, "0")}
+          </span>
+        )}
+
+        {/* Selection overlay icon — top-right corner */}
         <div
           className={`
-            absolute top-[var(--space-1)] left-[var(--space-1)]
-            w-[24px] h-[24px] rounded-full
+            absolute top-[var(--space-1)] right-[var(--space-1)]
+            w-[24px] h-[24px] rounded-full z-10
             flex items-center justify-center
             transition-all duration-[140ms] ease-out
             ${
               isSelected
                 ? "bg-[var(--accent-ember)] text-white opacity-100 scale-100"
-                : "bg-black/50 text-white opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100"
+                : "bg-black/50 text-white opacity-100 sm:opacity-0 sm:group-hover:opacity-100 scale-100 sm:scale-90 sm:group-hover:scale-100"
             }
           `}
         >
@@ -137,14 +178,14 @@ export function VideoCard({
 
         {/* Duration badge — mono-num, pill, bottom-right */}
         {durationSeconds != null && durationSeconds > 0 && (
-          <span className="absolute bottom-[var(--space-1)] right-[var(--space-1)] mono-num text-[11px] leading-none font-medium text-white bg-black/75 backdrop-blur-sm px-[5px] py-[3px] rounded-[4px]">
+          <span className="absolute bottom-[var(--space-1)] right-[var(--space-1)] mono-num text-[9px] font-medium text-white bg-black/60 px-[5px] py-[3px] rounded-[3px] z-10">
             {formatDuration(durationSeconds)}
           </span>
         )}
 
         {/* Already downloaded badge — bottom-left */}
         {isDownloaded && (
-          <span className="absolute bottom-[var(--space-1)] left-[var(--space-1)] flex items-center gap-[3px] text-[11px] leading-none font-medium text-[var(--accent-teal)] bg-black/75 backdrop-blur-sm px-[5px] py-[3px] rounded-[4px]">
+          <span className="absolute bottom-[var(--space-1)] left-[var(--space-1)] flex items-center gap-[3px] text-[9px] font-medium text-[var(--accent-teal)] bg-black/60 px-[5px] py-[3px] rounded-[3px] z-10">
             <CheckCircle size={10} strokeWidth={2.5} />
             Downloaded
           </span>
@@ -152,12 +193,12 @@ export function VideoCard({
       </div>
 
       {/* Title + metadata */}
-      <div className="mt-[var(--space-2)] px-[var(--space-1)]">
-        <h3 className="text-[var(--text-body)] text-[var(--text-primary)] font-normal leading-snug line-clamp-2">
+      <div className="flex-1 min-w-0 sm:mt-1.5 sm:px-1 z-10 relative">
+        <h3 className="text-xs sm:text-[var(--text-body)] text-[var(--text-primary)] font-normal leading-tight line-clamp-2">
           {title}
         </h3>
-        {relativeDate && (
-          <p className="mt-[var(--space-1)] text-[var(--text-caption)] text-[var(--text-secondary)]">
+        {relativeDate && relativeDate !== "—" && (
+          <p className="mt-[2px] text-[10px] sm:text-[var(--text-caption)] text-[var(--text-secondary)] mono-num truncate">
             {relativeDate}
           </p>
         )}
@@ -165,3 +206,4 @@ export function VideoCard({
     </div>
   );
 }
+

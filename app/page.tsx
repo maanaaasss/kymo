@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useRef, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
@@ -11,6 +11,9 @@ import {
   Link as LinkIcon,
 } from "lucide-react";
 import { CapabilityCards } from "@/components/landing/CapabilityCards";
+import { ChannelHeader } from "@/components/channel/ChannelHeader";
+import { VideoGrid } from "@/components/channel/VideoGrid";
+import { SingleVideoView } from "@/components/channel/SingleVideoView";
 import gsap from "gsap";
 
 interface BinaryStatus {
@@ -34,20 +37,24 @@ const WORDS = ["thumbnail", "video", "audio", "banner", "metadata"];
 
 const getDrawDuration = (word: string) => {
   const len = word.length;
-  if (len <= 5) return 1.2;
-  if (len >= 9) return 0.8;
-  return 1.2 - ((len - 5) / 4) * 0.4;
+  if (len <= 5) return 1.8;
+  if (len >= 9) return 1.3;
+  return 1.8 - ((len - 5) / 4) * 0.5;
 };
 
 const getRetractDuration = (word: string) => {
   const len = word.length;
-  if (len <= 5) return 0.8;
-  if (len >= 9) return 0.6;
-  return 0.8 - ((len - 5) / 4) * 0.2;
+  if (len <= 5) return 1.3;
+  if (len >= 9) return 1.0;
+  return 1.3 - ((len - 5) / 4) * 0.3;
 };
 
-export default function HomePage() {
+function HomePageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeChannelId = searchParams.get("c");
+  const activeVideoId = searchParams.get("v");
+
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
@@ -59,6 +66,39 @@ export default function HomePage() {
   });
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const [channel, setChannel] = useState<any | null>(null);
+  const [videoCount, setVideoCount] = useState(0);
+  const [channelLoading, setChannelLoading] = useState(false);
+  const [channelError, setChannelError] = useState<string | null>(null);
+
+  // Fetch channel details client-side if a channel ID is active
+  useEffect(() => {
+    if (!activeChannelId) {
+      setChannel(null);
+      return;
+    }
+
+    async function fetchChannel() {
+      setChannelLoading(true);
+      setChannelError(null);
+      try {
+        const res = await fetch(`/api/channels/${activeChannelId}?page=1&limit=1`);
+        if (!res.ok) {
+          setChannelError("Channel not found");
+          return;
+        }
+        const data = await res.json();
+        setChannel(data.channel);
+        setVideoCount(data.pagination.total);
+      } catch {
+        setChannelError("Failed to load channel");
+      } finally {
+        setChannelLoading(false);
+      }
+    }
+    fetchChannel();
+  }, [activeChannelId]);
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
   const underlineRef = useRef<SVGSVGElement>(null);
@@ -212,7 +252,7 @@ export default function HomePage() {
             info.path.setAttribute("stroke-dashoffset", "0");
           }
           startNextCycle(nextIndex);
-        }, 2000);
+        }, 4000);
         return;
       }
 
@@ -233,8 +273,8 @@ export default function HomePage() {
         if (!isMounted) return;
 
         let tick = 0;
-        const totalTicks = 20;
-        const tickInterval = 40; // 20 * 40 = 800ms
+        const totalTicks = 25;
+        const tickInterval = 65; // 25 * 65 = 1625ms
         const randomChars = "abcdefghijklmnopqrstuvwxyz";
 
         scrambleInterval = setInterval(() => {
@@ -262,22 +302,22 @@ export default function HomePage() {
             setWaveViewBox(nextWave.viewBox);
             setCycleIndex(nextIndex);
 
-            // Step 4: After draw complete, hold for exactly 2000ms, then trigger next cycle
+            // Step 4: After draw complete, hold for exactly 4000ms, then trigger next cycle
             const drawDurationMs = getDrawDuration(targetWord) * 1000;
             sequenceTimeout = setTimeout(() => {
               if (!isMounted) return;
               startNextCycle(nextIndex);
-            }, drawDurationMs + 2000);
+            }, drawDurationMs + 4000);
           }
         }, tickInterval);
 
       }, retractDurationMs);
     };
 
-    // Initially start the loop after the first hold duration (2000ms)
+    // Initially start the loop after the first hold duration (4000ms)
     sequenceTimeout = setTimeout(() => {
       startNextCycle(0);
-    }, 2000);
+    }, 4000);
 
     return () => {
       isMounted = false;
@@ -297,7 +337,7 @@ export default function HomePage() {
       gsap.set(q(".logo-animation-target"), { y: 14, opacity: 0 });
       gsap.set(q(".tagline-animation-target"), { y: 14, opacity: 0 });
       gsap.set(q(".input-animation-target"), { y: 14, opacity: 0 });
-      gsap.set(q(".card-animation-target"), { y: 14, rotate: 0, opacity: 0 });
+      gsap.set(q(".card-animation-target"), { scale: 0.9, rotate: 0, opacity: 0 });
       if (underlineRef.current) {
         const path = underlineRef.current.querySelector("path");
         if (path) {
@@ -365,12 +405,12 @@ export default function HomePage() {
           card,
           {
             opacity: 1,
-            y: 0,
+            scale: 1,
             rotate: restingRotation,
-            duration: 0.5,
-            ease: "back.out(1.5)",
+            duration: 0.45,
+            ease: "power2.out",
             onComplete: () => {
-              gsap.set(card, { clearProps: "transform,rotate" });
+              gsap.set(card, { clearProps: "transform,rotate,scale" });
             },
           },
           `reveal+=${0.45 + idx * 0.08}`
@@ -418,10 +458,16 @@ export default function HomePage() {
           return;
         }
 
-        router.push(`/channel/${data.channelId}`);
-      } catch {
+        if (data.type === "video" && data.videoId) {
+          router.push(`/?v=${data.videoId}`);
+        } else {
+          router.push(`/?c=${data.channelId}`);
+        }
+      } catch (err) {
         setResolveError(
-          "Couldn't connect to the server — is it still running?"
+          err instanceof Error
+            ? err.message
+            : "Something went wrong — try again"
         );
       } finally {
         setIsLoading(false);
@@ -431,7 +477,7 @@ export default function HomePage() {
   );
 
   const isValidUrl = url.trim().length > 0;
-  const missingBinaries: BinaryStatus[] = [];
+  const missingBinaries = [];
   if (health && !health.binaries.ytDlp.found)
     missingBinaries.push(health.binaries.ytDlp);
   if (health && !health.binaries.ffmpeg.found)
@@ -440,68 +486,145 @@ export default function HomePage() {
   const initClass =
     shouldAnimate === null || shouldAnimate === true ? "gsap-init" : "";
 
+  if (activeVideoId) {
+    return (
+      <div className="flex flex-col flex-1 bg-[var(--bg-canvas)] w-full min-h-screen">
+        {/* Header containing a minimal navigation row for back tracking */}
+        <div className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
+          <div className="mx-auto max-w-[1200px] px-[var(--space-5)] pt-[var(--space-3)] pb-[var(--space-3)]">
+            <button
+              onClick={() => router.push("/")}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-raised)] border border-[var(--border-subtle)] transition-all duration-[140ms] ease-out cursor-pointer"
+              aria-label="Back to landing page"
+            >
+              <LinkIcon size={11} />
+              Paste another link
+            </button>
+          </div>
+        </div>
+
+        <main className="flex-1 mx-auto w-full max-w-[1200px] px-[var(--space-5)] py-[var(--space-6)]">
+          <SingleVideoView
+            videoId={activeVideoId}
+            onBrowseChannel={(channelId) => router.push(`/?c=${channelId}`)}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  if (activeChannelId) {
+    if (channelLoading) {
+      return (
+        <div className="flex flex-1 items-center justify-center py-20 bg-[var(--bg-canvas)] min-h-[80vh]">
+          <Loader2 className="h-6 w-6 animate-spin text-[var(--text-secondary)]" />
+        </div>
+      );
+    }
+
+    if (channelError || !channel) {
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center py-20 text-[var(--text-secondary)] bg-[var(--bg-canvas)] min-h-[80vh] gap-[var(--space-3)]">
+          <p>{channelError ?? "Channel not found"}</p>
+          <button
+            onClick={() => router.push("/")}
+            className="rounded-[var(--radius-pill)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-[var(--space-4)] py-[var(--space-2)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-raised)] transition-all cursor-pointer"
+          >
+            Go back
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col flex-1 bg-[var(--bg-canvas)] w-full min-h-screen">
+        <ChannelHeader
+          title={channel.title}
+          videoCount={videoCount}
+          thumbnailUrl={channel.thumbnailUrl}
+          bannerUrl={channel.bannerUrl}
+          handle={channel.handle}
+          subscriberCount={channel.subscriberCount}
+          description={channel.description}
+          verified={channel.verified}
+          onReset={() => router.push("/")}
+        />
+
+        <main className="flex-1 mx-auto w-full max-w-[1200px] px-[var(--space-5)] py-[var(--space-5)]">
+          <VideoGrid channelId={activeChannelId} channelTitle={channel.title} />
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={containerRef}
-      className={`flex flex-1 flex-col items-center justify-center px-[var(--space-5)] py-[var(--space-7)] relative page-reveal-container ${initClass}`}
+      className={`flex flex-col min-h-screen justify-between items-center px-[var(--space-5)] py-[var(--space-5)] relative page-reveal-container ${initClass}`}
     >
-      
-      {/* Kymo Logo - top-left corner */}
-      <div
-        className={`absolute top-[var(--space-5)] left-[var(--space-5)] logo-animation-target z-10 flex items-center gap-2 select-none ${initClass}`}
+      {/* Header containing Kymo logo and GitHub link */}
+      <header
+        className={`
+          w-full max-w-[560px] md:max-w-none md:absolute md:top-[var(--space-5)] md:left-0 md:right-0 md:px-[var(--space-5)]
+          flex items-center justify-between gap-4 select-none z-10 shrink-0
+          mb-[var(--space-6)] md:mb-0
+          logo-animation-target ${initClass}
+        `}
       >
-        <svg
-          viewBox="0 0 34 20"
-          width="34"
-          height="20"
-          fill="none"
-          className="text-[#E2562B]"
-        >
-          <path
-            d="M2 10 C 5 3, 9 3, 12 10 C 15 17, 19 17, 22 10 C 25 3, 29 3, 32 10"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-        <span className="font-sans font-medium text-[16px] text-[var(--text-primary)] leading-none mt-[-1px]">
-          Kymo
-        </span>
-      </div>
-
-      {/* GitHub Star Button - top-right corner */}
-      <a
-        href="https://github.com/maanaaasss/tube.manaaasss"
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`absolute top-[var(--space-5)] right-[var(--space-5)] logo-animation-target z-10 ${initClass}`}
-      >
-        <div
-          className="
-            flex items-center gap-[var(--space-2)]
-            rounded-[var(--radius-card)]
-            border border-[var(--border-subtle)]
-            bg-[var(--bg-surface)]
-            px-[var(--space-3)] py-[var(--space-2)]
-            text-[var(--text-body)] text-[var(--text-secondary)]
-            transition-all duration-[140ms] ease-out
-            hover:border-[var(--accent-ember)]/50 hover:text-[var(--text-primary)]
-            hover:bg-[var(--bg-surface-raised)]
-          "
-        >
+        {/* Kymo Logo */}
+        <div className="flex items-center gap-2">
           <svg
-            viewBox="0 0 16 16"
-            width="16"
-            height="16"
-            fill="currentColor"
+            viewBox="0 0 34 20"
+            width="34"
+            height="20"
+            fill="none"
+            className="text-[#E2692F]"
           >
-            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+            <path
+              d="M2 10 C 5 3, 9 3, 12 10 C 15 17, 19 17, 22 10 C 25 3, 29 3, 32 10"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
-          <Star size={14} />
-          <span className="font-medium">Star</span>
+          <span className="font-sans font-medium text-[16px] text-[var(--text-primary)] leading-none mt-[-1px]">
+            Kymo
+          </span>
         </div>
-      </a>
+
+        {/* GitHub Star Button */}
+        <a
+          href="https://github.com/maanaaasss/tube.manaaasss"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <div
+            className="
+              flex items-center gap-[var(--space-2)]
+              rounded-[var(--radius-card)]
+              border border-[var(--border-subtle)]
+              bg-[var(--bg-surface)]
+              px-[var(--space-3)] py-[var(--space-2)]
+              text-[var(--text-body)] text-[var(--text-secondary)]
+              transition-all duration-[140ms] ease-out
+              hover:border-[var(--accent-ember)]/50 hover:text-[var(--text-primary)]
+              hover:bg-[var(--bg-surface-raised)]
+            "
+          >
+            <svg
+              viewBox="0 0 16 16"
+              width="16"
+              height="16"
+              fill="currentColor"
+            >
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+            </svg>
+            <Star size={14} />
+            <span className="font-medium">Star</span>
+          </div>
+        </a>
+      </header>
 
       {/* Binary status banners */}
       <AnimatePresence>
@@ -540,39 +663,49 @@ export default function HomePage() {
       </AnimatePresence>
 
       {/* Main content */}
-      <div className="w-full max-w-[560px]">
+      <main className="w-full max-w-[560px] flex-1 flex flex-col justify-center py-[var(--space-6)] relative z-10 my-auto">
         
         {/* Headline */}
-        <div className="text-center mb-[var(--space-7)]">
+        <div className="text-center sm:text-left mb-[var(--space-7)] select-none w-full">
           <h1
-            className={`tagline-animation-target text-[28px] md:text-[30px] font-medium text-text-primary tracking-tight leading-none whitespace-nowrap flex items-center justify-center relative z-10 w-full ${initClass}`}
+            className={`tagline-animation-target flex flex-col sm:flex-row flex-wrap items-center justify-center sm:justify-start relative z-10 w-full tracking-tight leading-none ${initClass}`}
           >
-            <span className="inline-block w-[50%] text-right pr-[4px]">
+            {/* Line 1: "Download YouTube" */}
+            <span className="text-[22px] min-[360px]:text-[24px] sm:text-[30px] font-medium text-[var(--text-primary)] sm:pr-2 block sm:inline text-center sm:text-left">
               Download YouTube
             </span>
-            <span className="inline-block w-[50%] text-left pl-[4px] relative select-none">
-              <span className="inline-block relative">
-                <span
-                  ref={textRef}
-                  className="italic font-medium"
-                  style={{ color: "#E2562B" }}
-                >
-                  video
+
+            {/* Line 2: The cycling word */}
+            <span className="relative flex justify-center sm:justify-start items-center select-none mt-2 sm:mt-0 w-full sm:w-auto">
+              <span 
+                className="inline-block relative overflow-hidden whitespace-nowrap text-center sm:text-left w-[150px] sm:w-auto px-1"
+                style={{ paddingBottom: "0.35em" }}
+              >
+                <span className="relative inline-block">
+                  <span
+                    ref={textRef}
+                    className="italic font-medium text-[27px] sm:text-[30px] pr-[0.06em] inline-block"
+                    style={{ color: "#E2692F" }}
+                  >
+                    video
+                  </span>
+                  <svg
+                    ref={underlineRef}
+                    className="absolute left-0 w-full pointer-events-none"
+                    style={{ bottom: "-0.2em", height: "0.3em" }}
+                    viewBox={waveViewBox}
+                    preserveAspectRatio="none"
+                  >
+                    <path
+                      d={wavePath}
+                      fill="none"
+                      stroke="#E2692F"
+                      strokeWidth="1.8"
+                      className="sm:stroke-[2.3]"
+                      strokeLinecap="round"
+                    />
+                  </svg>
                 </span>
-                <svg
-                  ref={underlineRef}
-                  className="absolute bottom-[-6px] left-0 w-full h-[10px] pointer-events-none"
-                  viewBox={waveViewBox}
-                  preserveAspectRatio="xMinYMid slice"
-                >
-                  <path
-                    d={wavePath}
-                    fill="none"
-                    stroke="#E2562B"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
               </span>
             </span>
           </h1>
@@ -581,11 +714,11 @@ export default function HomePage() {
         {/* URL Input */}
         <form
           onSubmit={handleSubmit}
-          className={`relative input-animation-target ${initClass}`}
+          className={`relative input-animation-target w-full ${initClass}`}
         >
           <div
             className={`
-              relative flex items-center
+              relative flex items-center w-full
               rounded-[var(--radius-card)] border
               bg-[var(--bg-surface)]
               transition-all duration-[140ms] ease-out
@@ -601,7 +734,7 @@ export default function HomePage() {
             <LinkIcon
               size={16}
               className={`ml-[var(--space-4)] shrink-0 transition-colors duration-200 ${
-                isFocused || isValidUrl ? "text-[#E2562B]" : "text-[var(--text-secondary)]/60"
+                isFocused || isValidUrl ? "text-[#E2692F]" : "text-[var(--text-secondary)]/60"
               }`}
             />
             <input
@@ -688,16 +821,16 @@ export default function HomePage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="mt-[var(--space-4)] text-center text-[var(--text-body)] text-[var(--text-secondary)]"
+              className="absolute left-0 right-0 -bottom-[32px] text-center text-[var(--text-body)] text-[var(--text-secondary)] pointer-events-none"
             >
-              Fetching channel — this can take a moment for large channels…
+              Grabbing channel info... Sit tight, this can take a sec.
             </motion.p>
           )}
         </AnimatePresence>
-      </div>
+      </main>
 
       {/* Footer with version / attribution */}
-      <div className="absolute bottom-[var(--space-5)] text-[var(--text-caption)] text-[var(--text-secondary)]/40 text-center">
+      <footer className="text-[var(--text-caption)] text-[var(--text-secondary)]/40 text-center select-none shrink-0 pb-1 mt-[var(--space-6)] relative">
         <span>
           built with ❤️ by{" "}
           <a
@@ -709,7 +842,19 @@ export default function HomePage() {
             maanaaasss
           </a>
         </span>
-      </div>
+      </footer>
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-1 items-center justify-center py-20 bg-[var(--bg-canvas)] min-h-screen">
+        <Loader2 className="h-6 w-6 animate-spin text-[var(--text-secondary)]" />
+      </div>
+    }>
+      <HomePageContent />
+    </Suspense>
   );
 }

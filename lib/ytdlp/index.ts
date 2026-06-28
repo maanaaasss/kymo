@@ -235,6 +235,59 @@ function parseUploadDate(dateStr: string | undefined | null): Date | null {
 }
 
 /**
+ * Fetch a specific tab (videos, shorts, or playlists) for a channel and cache to SQLite.
+ */
+async function fetchChannelTab(
+  channelUrl: string,
+  suffix: string,
+  tabName: "videos" | "shorts" | "playlists",
+  channelId: string,
+  now: Date
+): Promise<number> {
+  const tabUrl = channelUrl.replace(/\/$/, "") + suffix;
+  try {
+    const flatOutput = await spawnYtDlp([
+      "--flat-playlist",
+      "--dump-json",
+      "--no-warnings",
+      tabUrl,
+    ]);
+
+    const flatVideos = parseJsonLines<YtDlpFlatVideoEntry>(flatOutput);
+    let cachedCount = 0;
+
+    for (const entry of flatVideos) {
+      if (!entry.id || !entry.title) continue;
+
+      const existing = await db.query.videos.findFirst({
+        where: eq(videos.id, entry.id),
+      });
+
+      if (!existing) {
+        await db.insert(videos).values({
+          id: entry.id,
+          channelId,
+          title: entry.title,
+          durationSeconds: entry.duration ? Math.round(entry.duration) : null,
+          thumbnailUrl: getBestThumbnail(entry.thumbnails),
+          publishedAt: null,
+          availableFormats: null,
+          fetchedAt: now,
+          tab: tabName,
+        });
+        cachedCount++;
+      } else {
+        await db.update(videos).set({ tab: tabName }).where(eq(videos.id, entry.id));
+      }
+    }
+    return flatVideos.length;
+  } catch (err) {
+    console.log(`[ytdlp] Tab ${suffix} failed/not found:`, err instanceof Error ? err.message : err);
+    return 0;
+  }
+}
+
+/**
  * Resolve a YouTube URL: detect type, fetch metadata, cache to SQLite.
  *
  * Strategy:
@@ -298,11 +351,38 @@ export async function resolveUrl(url: string): Promise<ResolvedUrl> {
     bannerUrl = channelMeta.bannerUrl;
   }
 
+  // Fallback: If banner or avatar is missing (e.g. single video search), fetch channel container info
+  if (!avatarUrl || !bannerUrl) {
+    try {
+      const channelVideosUrl = `https://www.youtube.com/channel/${channelId}/videos`;
+      const channelMetaOutput = await spawnYtDlp([
+        "--dump-single-json",
+        "--playlist-items",
+        "1",
+        "--no-warnings",
+        channelVideosUrl,
+      ]);
+      const channelMetaJSON = JSON.parse(channelMetaOutput.trim());
+      if (channelMetaJSON.thumbnails) {
+        const channelMeta = extractChannelMetadata(channelMetaJSON.thumbnails);
+        if (!avatarUrl) avatarUrl = channelMeta.avatarUrl;
+        if (!bannerUrl) bannerUrl = channelMeta.bannerUrl;
+      }
+    } catch (e) {
+      console.warn("Failed to fetch channel thumbnails for video", e);
+    }
+  }
+
   // Step 2: Cache the channel
   const now = new Date();
   const existingChannel = await db.query.channels.findFirst({
     where: eq(channels.id, channelId),
   });
+
+  const handle = playlistData.uploader_id || firstVideo.uploader_id || null;
+  const subscriberCount = playlistData.channel_follower_count || firstVideo.channel_follower_count || null;
+  const description = playlistData.description || null;
+  const verified = playlistData.channel_is_verified || firstVideo.channel_is_verified || false;
 
   if (!existingChannel) {
     await db.insert(channels).values({
@@ -311,9 +391,20 @@ export async function resolveUrl(url: string): Promise<ResolvedUrl> {
       thumbnailUrl: avatarUrl,
       bannerUrl: bannerUrl,
       fetchedAt: now,
+      handle,
+      subscriberCount: subscriberCount ? Number(subscriberCount) : null,
+      description,
+      verified: verified ? 1 : 0,
     });
   } else {
-    const updateValues: Record<string, any> = { title: channelTitle, fetchedAt: now };
+    const updateValues: Record<string, any> = {
+      title: channelTitle,
+      fetchedAt: now,
+      handle,
+      subscriberCount: subscriberCount ? Number(subscriberCount) : null,
+      description,
+      verified: verified ? 1 : 0,
+    };
     if (avatarUrl) updateValues.thumbnailUrl = avatarUrl;
     if (bannerUrl) updateValues.bannerUrl = bannerUrl;
 
@@ -334,49 +425,62 @@ export async function resolveUrl(url: string): Promise<ResolvedUrl> {
       channelThumbnail: null,
       channelBanner: null,
       videoCount: 1,
+      videoId: firstVideo.id,
     };
   }
 
-  // Step 4: For channels/playlists, fetch all videos via --flat-playlist
-  const flatOutput = await spawnYtDlp([
-    "--flat-playlist",
-    "--dump-json",
-    "--no-warnings",
-    channelVideosUrl,
-  ]);
-
-  const flatVideos = parseJsonLines<YtDlpFlatVideoEntry>(flatOutput);
-
-  // Step 5: Cache all videos to SQLite
-  let cachedCount = 0;
-  for (const entry of flatVideos) {
-    if (!entry.id || !entry.title) continue;
-
-    const existing = await db.query.videos.findFirst({
-      where: eq(videos.id, entry.id),
-    });
-
-    if (!existing) {
-      await db.insert(videos).values({
-        id: entry.id,
-        channelId,
-        title: entry.title,
-        durationSeconds: entry.duration ? Math.round(entry.duration) : null,
-        thumbnailUrl: getBestThumbnail(entry.thumbnails),
-        publishedAt: null, // Not available in flat mode
-        availableFormats: null,
-        fetchedAt: now,
-      });
-      cachedCount++;
-    }
-  }
-
-  // Step 6: For channels, also fetch the /releases tab (albums/EPs).
-  // The releases tab returns playlist references — expand each to get tracks.
-  // Channels without a releases tab are handled gracefully (error is caught).
+  // Step 4: Fetch channel tabs or playlist videos
+  let videosCount = 0;
+  let shortsCount = 0;
+  let playlistsCount = 0;
   let releasesCount = 0;
+
   if (urlType === "channel") {
-    releasesCount = await fetchReleasesTab(url, channelId, now);
+    // Parallel fetching for channels: Videos, Shorts, Playlists, Releases
+    const results = await Promise.allSettled([
+      fetchChannelTab(url, "/videos", "videos", channelId, now),
+      fetchChannelTab(url, "/shorts", "shorts", channelId, now),
+      fetchChannelTab(url, "/playlists", "playlists", channelId, now),
+      fetchReleasesTab(url, channelId, now),
+    ]);
+
+    videosCount = results[0].status === "fulfilled" ? results[0].value : 0;
+    shortsCount = results[1].status === "fulfilled" ? results[1].value : 0;
+    playlistsCount = results[2].status === "fulfilled" ? results[2].value : 0;
+    releasesCount = results[3].status === "fulfilled" ? results[3].value : 0;
+  } else {
+    // Playlist or single video
+    const flatOutput = await spawnYtDlp([
+      "--flat-playlist",
+      "--dump-json",
+      "--no-warnings",
+      channelVideosUrl,
+    ]);
+
+    const flatVideos = parseJsonLines<YtDlpFlatVideoEntry>(flatOutput);
+    videosCount = flatVideos.length;
+
+    for (const entry of flatVideos) {
+      if (!entry.id || !entry.title) continue;
+
+      const existing = await db.query.videos.findFirst({
+        where: eq(videos.id, entry.id),
+      });
+
+      if (!existing) {
+        await db.insert(videos).values({
+          id: entry.id,
+          channelId,
+          title: entry.title,
+          durationSeconds: entry.duration ? Math.round(entry.duration) : null,
+          thumbnailUrl: getBestThumbnail(entry.thumbnails),
+          publishedAt: null,
+          availableFormats: null,
+          fetchedAt: now,
+          tab: "videos",
+        });
+      }
+    }
   }
 
   // Also ensure the first video (full metadata) is cached with its extra data
@@ -388,7 +492,7 @@ export async function resolveUrl(url: string): Promise<ResolvedUrl> {
     channelTitle,
     channelThumbnail: avatarUrl || (existingChannel?.thumbnailUrl ?? null),
     channelBanner: bannerUrl || (existingChannel?.bannerUrl ?? null),
-    videoCount: flatVideos.length + releasesCount,
+    videoCount: videosCount + shortsCount + playlistsCount + releasesCount,
   };
 }
 
@@ -417,6 +521,8 @@ async function cacheVideoFromFull(
       publishedAt,
       availableFormats: null,
       fetchedAt: now,
+      tab: "videos",
+      viewCount: video.view_count || null,
     });
   } else {
     // Update with richer data from full metadata
@@ -429,6 +535,7 @@ async function cacheVideoFromFull(
           video.thumbnail || getBestThumbnail(video.thumbnails) || existing.thumbnailUrl,
         publishedAt: publishedAt || existing.publishedAt,
         fetchedAt: now,
+        viewCount: video.view_count || existing.viewCount,
       })
       .where(eq(videos.id, video.id));
   }
@@ -516,8 +623,11 @@ async function fetchReleasesTab(
             publishedAt: null,
             availableFormats: null,
             fetchedAt: now,
+            tab: "releases",
           });
           totalCached++;
+        } else {
+          await db.update(videos).set({ tab: "releases" }).where(eq(videos.id, track.id));
         }
       }
     } catch {
