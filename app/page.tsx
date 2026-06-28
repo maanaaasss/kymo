@@ -671,7 +671,7 @@ function HomePageContent() {
             className={`tagline-animation-target flex flex-col sm:flex-row flex-wrap items-center justify-center sm:justify-start relative z-10 w-full tracking-tight leading-none ${initClass}`}
           >
             {/* Line 1: "Download YouTube" */}
-            <span className="text-[22px] min-[360px]:text-[24px] sm:text-[30px] font-medium text-[var(--text-primary)] sm:pr-2 block sm:inline text-center sm:text-left">
+            <span className="text-[26px] min-[360px]:text-[28px] sm:text-[36px] font-semibold text-[var(--text-primary)] sm:pr-2 block sm:inline text-center sm:text-left">
               Download YouTube
             </span>
 
@@ -684,7 +684,7 @@ function HomePageContent() {
                 <span className="relative inline-block">
                   <span
                     ref={textRef}
-                    className="italic font-medium text-[27px] sm:text-[30px] pr-[0.06em] inline-block"
+                    className="italic font-medium text-[22px] min-[360px]:text-[24px] sm:text-[30px] pr-[0.06em] inline-block"
                     style={{ color: "#E2692F" }}
                   >
                     video
