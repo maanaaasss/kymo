@@ -61,7 +61,7 @@ export const metadata: Metadata = {
     siteName: "Kymo",
     images: [
       {
-        url: "/opengraph-image.png",
+        url: "https://kymo.download/og-image.png",
         width: 1200,
         height: 630,
         alt: "Kymo — YouTube bulk downloader",
@@ -74,7 +74,7 @@ export const metadata: Metadata = {
     description:
       "Browse channels, select videos, and download them in bulk. A personal-use tool for managing YouTube downloads.",
     creator: "@maanaaasss",
-    images: ["/opengraph-image.png"],
+    images: ["https://kymo.download/og-image.png"],
   },
 };
 
