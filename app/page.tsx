@@ -560,14 +560,14 @@ function HomePageContent() {
   return (
     <div
       ref={containerRef}
-      className={`flex flex-col min-h-screen justify-between items-center px-[var(--space-5)] py-[var(--space-5)] relative page-reveal-container ${initClass}`}
+      className={`flex flex-col h-[100dvh] sm:min-h-screen overflow-hidden sm:overflow-visible justify-between items-center px-[var(--space-5)] py-4 sm:py-[var(--space-5)] relative page-reveal-container ${initClass}`}
     >
       {/* Header containing Kymo logo and GitHub link */}
       <header
         className={`
           w-full max-w-[560px] md:max-w-none md:absolute md:top-[var(--space-5)] md:left-0 md:right-0 md:px-[var(--space-5)]
           flex items-center justify-between gap-4 select-none z-10 shrink-0
-          mb-[var(--space-6)] md:mb-0
+          mb-3 sm:mb-[var(--space-6)] md:mb-0
           logo-animation-target ${initClass}
         `}
       >
@@ -663,7 +663,7 @@ function HomePageContent() {
       </AnimatePresence>
 
       {/* Main content */}
-      <main className="w-full max-w-[560px] flex-1 flex flex-col justify-center py-[var(--space-6)] relative z-10 my-auto">
+      <main className="w-full max-w-[560px] flex-1 flex flex-col justify-center py-2 sm:py-[var(--space-6)] relative z-10 my-auto">
         
         {/* Headline */}
         <div className="text-center sm:text-left mb-[var(--space-7)] select-none w-full">
@@ -814,23 +814,10 @@ function HomePageContent() {
           )}
         </AnimatePresence>
 
-        {/* Loading status text */}
-        <AnimatePresence>
-          {isLoading && (
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute left-0 right-0 -bottom-[32px] text-center text-[var(--text-body)] text-[var(--text-secondary)] pointer-events-none"
-            >
-              Grabbing channel info... Sit tight, this can take a sec.
-            </motion.p>
-          )}
-        </AnimatePresence>
       </main>
 
       {/* Footer with version / attribution */}
-      <footer className="text-[var(--text-caption)] text-[var(--text-secondary)]/40 text-center select-none shrink-0 pb-1 mt-[var(--space-6)] relative">
+      <footer className="text-[var(--text-caption)] text-[var(--text-secondary)]/40 text-center select-none shrink-0 pb-1 mt-3 sm:mt-[var(--space-6)] relative">
         <span>
           built with ❤️ by{" "}
           <a
