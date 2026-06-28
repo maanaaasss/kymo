@@ -59,6 +59,14 @@ export const metadata: Metadata = {
     description:
       "Browse channels, select videos, and download them in bulk. A personal-use tool for managing YouTube downloads.",
     siteName: "Kymo",
+    images: [
+      {
+        url: "/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Kymo — YouTube bulk downloader",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
@@ -66,6 +74,7 @@ export const metadata: Metadata = {
     description:
       "Browse channels, select videos, and download them in bulk. A personal-use tool for managing YouTube downloads.",
     creator: "@maanaaasss",
+    images: ["/opengraph-image.png"],
   },
 };
 
