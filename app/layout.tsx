@@ -21,7 +21,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://kymo.download"),
+  metadataBase: new URL("https://kymo.vercel.app"),
   title: "Kymo — YouTube bulk downloader",
   description:
     "Browse channels, select videos, and download them in bulk. A personal-use tool for managing YouTube downloads.",
@@ -54,14 +54,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://kymo.download",
+    url: "https://kymo.vercel.app",
     title: "Kymo — YouTube bulk downloader",
     description:
       "Browse channels, select videos, and download them in bulk. A personal-use tool for managing YouTube downloads.",
     siteName: "Kymo",
     images: [
       {
-        url: "https://kymo.download/og-image.png",
+        url: "https://kymo.vercel.app/og-image.png",
         width: 1200,
         height: 630,
         alt: "Kymo — YouTube bulk downloader",
@@ -74,7 +74,7 @@ export const metadata: Metadata = {
     description:
       "Browse channels, select videos, and download them in bulk. A personal-use tool for managing YouTube downloads.",
     creator: "@maanaaasss",
-    images: ["https://kymo.download/og-image.png"],
+    images: ["https://kymo.vercel.app/og-image.png"],
   },
 };
 
