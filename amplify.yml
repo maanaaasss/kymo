@@ -1,0 +1,25 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - npm install -g pnpm@10.17.1
+        - pnpm config set minimumReleaseAge 0
+        - pnpm install
+    build:
+      commands:
+        - npx next build
+  artifacts:
+    baseDirectory: .next
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/.cache/**/*
+      - .next/cache/**/*
+      - node_modules/**/*
+  customHeaders:
+    - pattern: '**/*'
+      header: 'Cache-Control: public, max-age=31536000, immutable'
+    - pattern: '_next/data/**'
+      header: 'Cache-Control: public, max-age=31536000, immutable'
