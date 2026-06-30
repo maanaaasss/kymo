@@ -8,7 +8,6 @@ import {
   ChevronDown,
   CheckCircle,
   AlertCircle,
-  Download,
   Loader2,
   X,
 } from "lucide-react";
@@ -114,9 +113,7 @@ export function DownloadProgress() {
     return { totalJobs, completedJobs, failedJobs, overallPct };
   }, [batches]);
 
-  const handleDownloadZip = useCallback((batchId: string) => {
-    window.open(`/api/batches/${batchId}/zip`, "_blank");
-  }, []);
+
 
   const isRecentCompletedValid =
     recentCompleted && seenActiveBatchIds.includes(recentCompleted.batch.id);
@@ -169,14 +166,7 @@ export function DownloadProgress() {
                 </p>
               </div>
 
-              {/* ZIP download button */}
-              <button
-                onClick={() => handleDownloadZip(rc.batch.id)}
-                className="flex items-center gap-[var(--space-2)] rounded-[var(--radius-pill)] bg-[var(--accent-teal)]/15 border border-[var(--accent-teal)]/30 px-[var(--space-3)] py-[var(--space-1)] text-[var(--text-caption)] font-medium text-[var(--accent-teal)] transition-all duration-[140ms] ease-out hover:bg-[var(--accent-teal)]/25 hover:border-[var(--accent-teal)]/50 cursor-pointer"
-              >
-                <Download size={12} />
-                ZIP
-              </button>
+
 
               {/* Dismiss */}
               <button

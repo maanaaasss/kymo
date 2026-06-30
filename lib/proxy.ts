@@ -40,17 +40,6 @@ export async function proxyIfRemote(
       signal: AbortSignal.timeout(30000),
     });
 
-    // Proxy the response, including streaming for ZIP downloads
-    if (res.headers.get("content-type")?.includes("application/zip")) {
-      return new NextResponse(res.body, {
-        status: res.status,
-        headers: {
-          "content-type": "application/zip",
-          "content-disposition":
-            res.headers.get("content-disposition") ?? "attachment",
-        },
-      });
-    }
 
     const body = await res.text();
     return new NextResponse(body, {
