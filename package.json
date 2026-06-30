@@ -30,6 +30,15 @@
     "split-type": "^0.3.4",
     "zustand": "^5.0.14"
   },
+  "packageManager": "pnpm@10.17.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild",
+      "sharp",
+      "unrs-resolver"
+    ]
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/archiver": "^8.0.0",
