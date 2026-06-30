@@ -4,7 +4,8 @@ frontend:
     preBuild:
       commands:
         - npm install -g pnpm
-        - pnpm install --frozen-lockfile
+        - pnpm config set minimumReleaseAge 0
+        - pnpm install
     build:
       commands:
         - pnpm run build
