@@ -40,7 +40,21 @@ export async function proxyIfRemote(
       signal: AbortSignal.timeout(60000),
     });
 
+    const contentType = res.headers.get("content-type") || "application/json";
 
+    // Binary responses (files) — pass through as-is
+    if (contentType.includes("application/octet-stream") || contentType.includes("audio/") || contentType.includes("video/")) {
+      const body = await res.arrayBuffer();
+      return new NextResponse(body, {
+        status: res.status,
+        headers: {
+          "content-type": contentType,
+          "content-disposition": res.headers.get("content-disposition") || "",
+        },
+      });
+    }
+
+    // JSON responses
     const body = await res.text();
     return new NextResponse(body, {
       status: res.status,

@@ -46,3 +46,7 @@ next-env.d.ts
 # drizzle migrations
 /drizzle/
 
+# railway python
+__pycache__/
+*.pyc
+
