@@ -12,10 +12,16 @@ import { eq } from "drizzle-orm";
  * Spawn yt-dlp with the given arguments and collect stdout as a string.
  * Rejects with a user-friendly error message (Section 3.4 voice).
  */
+const YTDLP_ENV = {
+  ...process.env,
+  PATH: ["/usr/local/bin", "/usr/bin", "/bin", process.env.PATH].filter(Boolean).join(":"),
+};
+
 function spawnYtDlp(args: string[], timeoutMs = 120_000): Promise<string> {
   return new Promise((resolve, reject) => {
     const proc = spawn("yt-dlp", args, {
       stdio: ["ignore", "pipe", "pipe"],
+      env: YTDLP_ENV,
     });
 
     let stdout = "";

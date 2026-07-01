@@ -1,11 +1,7 @@
 import { NextRequest } from "next/server";
-import { proxyIfRemote } from "@/lib/proxy";
 import { useDynamoDb } from "@/lib/db/repository";
 
 export async function POST(request: NextRequest) {
-  const proxied = await proxyIfRemote(request);
-  if (proxied) return proxied;
-
   try {
     const body = await request.json();
     const { videos, config } = body;

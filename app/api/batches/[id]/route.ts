@@ -1,4 +1,3 @@
-import { proxyIfRemote } from "@/lib/proxy";
 import { NextRequest } from "next/server";
 import { useDynamoDb } from "@/lib/db/repository";
 
@@ -6,9 +5,6 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const proxied = await proxyIfRemote(request);
-  if (proxied) return proxied;
-
   try {
     const { id } = await params;
 

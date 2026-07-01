@@ -37,7 +37,7 @@ export async function proxyIfRemote(
   try {
     const res = await fetch(targetUrl, {
       ...init,
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(60000),
     });
 
 
