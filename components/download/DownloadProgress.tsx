@@ -121,15 +121,24 @@ export function DownloadProgress() {
   // Don't render if nothing to show
   if (!hasActiveBatches && !isRecentCompletedValid) return null;
 
-  // Show completed batch (with ZIP download) when no active batches
+  // Show completed batch (with individual download links) when no active batches
   if (
     !hasActiveBatches &&
     isRecentCompletedValid &&
     dismissedBatchId !== recentCompleted.batch.id
   ) {
     const rc = recentCompleted;
-    const doneCount = rc.jobs.filter((j) => j.status === "done").length;
+    const doneJobs = rc.jobs.filter((j) => j.status === "done");
     const failedCount = rc.jobs.filter((j) => j.status === "failed").length;
+
+    const handleDownload = (jobId: string) => {
+      const link = document.createElement("a");
+      link.href = `/api/batches/${rc.batch.id}/download?jobId=${jobId}`;
+      link.download = "";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
 
     return (
       <AnimatePresence>
@@ -156,7 +165,7 @@ export function DownloadProgress() {
                 <p className="text-[var(--text-body)] text-[var(--text-primary)] font-medium">
                   {rc.batch.totalJobs === 1
                     ? "Download complete"
-                    : `Downloaded ${doneCount} ${doneCount === 1 ? "video" : "videos"}`}
+                    : `Downloaded ${doneJobs.length} ${doneJobs.length === 1 ? "video" : "videos"}`}
                   {failedCount > 0 && (
                     <span className="text-[var(--accent-red)] font-normal">
                       {" "}
@@ -165,8 +174,6 @@ export function DownloadProgress() {
                   )}
                 </p>
               </div>
-
-
 
               {/* Dismiss */}
               <button
@@ -177,6 +184,27 @@ export function DownloadProgress() {
                 <X size={14} />
               </button>
             </div>
+
+            {/* Individual download buttons */}
+            {doneJobs.length > 0 && (
+              <div className="border-t border-[var(--accent-teal)]/20 px-[var(--space-4)] py-[var(--space-2)] max-h-[160px] overflow-y-auto">
+                {doneJobs.map((job) => (
+                  <button
+                    key={job.id}
+                    onClick={() => handleDownload(job.id)}
+                    className="w-full flex items-center gap-[var(--space-2)] py-[var(--space-1)] text-left hover:bg-[var(--bg-surface-raised)] rounded px-1 transition-colors cursor-pointer"
+                  >
+                    <CheckCircle size={12} className="text-[var(--accent-teal)] shrink-0" />
+                    <span className="flex-1 truncate text-[var(--text-caption)] text-[var(--text-secondary)]">
+                      {job.videoTitle}
+                    </span>
+                    <span className="text-[var(--text-caption)] text-[var(--accent-teal)] shrink-0">
+                      save
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </motion.div>
       </AnimatePresence>

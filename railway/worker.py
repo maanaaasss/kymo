@@ -7,7 +7,6 @@ import asyncio
 import json
 import os
 import re
-import shutil
 import time
 import urllib.request
 from datetime import datetime, timezone
@@ -155,7 +154,6 @@ def _process_image_job(job: dict):
     create_download_history(job.get("video_id", ""), job["kind"])
     increment_batch_completed(batch_id)
     check_batch_completion(batch_id)
-    shutil.rmtree(output_dir, ignore_errors=True)
 
 
 def _process_video_job(job: dict):
@@ -204,7 +202,6 @@ def _process_video_job(job: dict):
             create_download_history(video_id, job["kind"])
             increment_batch_completed(batch_id)
             check_batch_completion(batch_id)
-            shutil.rmtree(output_dir, ignore_errors=True)
             print(f"[Worker] Job {job_id} completed")
             return
 
