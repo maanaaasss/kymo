@@ -43,9 +43,12 @@ def run_ytdlp(args: list[str], timeout: int = 30) -> str:
     """Run yt-dlp and return stdout."""
     env = os.environ.copy()
     env["PATH"] = f"/opt/ffmpeg:{env.get('PATH', '')}"
+    env["TMPDIR"] = "/tmp"
+    env["TEMP"] = "/tmp"
+    env["TMP"] = "/tmp"
     try:
         result = subprocess.run(
-            ["yt-dlp", *args],
+            ["yt-dlp", "--cache-dir", "/tmp", *args],
             capture_output=True,
             text=True,
             timeout=timeout,
