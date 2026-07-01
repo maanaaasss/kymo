@@ -17,7 +17,7 @@ RUN ARCH=$(uname -m) && \
 
 # Install Python deps
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
 
 # Copy app code
 COPY . /app

@@ -24,8 +24,11 @@ def _is_bot_block(stderr: str) -> bool:
 
 def _ytdlp_env() -> dict:
     env = os.environ.copy()
-    ffmpeg_path = "/usr/local/bin"
-    env["PATH"] = f"{ffmpeg_path}:{env.get('PATH', '')}"
+    extra = "/usr/local/bin:/usr/bin"
+    env["PATH"] = f"{extra}:{env.get('PATH', '')}"
+    env["TMPDIR"] = "/tmp"
+    env["TEMP"] = "/tmp"
+    env["TMP"] = "/tmp"
     return env
 
 
