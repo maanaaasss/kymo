@@ -1,30 +1,45 @@
 """
-FastAPI backend for Kymo — handles yt-dlp operations.
+FastAPI backend for Kymo — owns ALL data operations.
 
 Deployed as a Lambda behind API Gateway. Vercel frontend proxies
-metadata/browse requests here via proxyIfRemote(BACKEND_URL).
+every request here via proxyIfRemote(BACKEND_URL).
+
+Responsibilities:
+- yt-dlp operations (resolve URL, video metadata, channel browse)
+- Batch management (create, status, active, download)
+- Download history queries
 """
 
 import json
 import os
 import re
 import subprocess
-import tempfile
+import time
+import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 import boto3
-from fastapi import FastAPI, HTTPException, Query
+from botocore.exceptions import ClientError
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # ─── AWS ──────────────────────────────────────────────────────────────────────
 
 REGION = os.environ.get("KYMO_REGION", "ap-south-2")
+BATCHES_TABLE = os.environ.get("DYNAMODB_BATCHES_TABLE", "kymo-batches")
+JOBS_TABLE = os.environ.get("DYNAMODB_JOBS_TABLE", "kymo-jobs")
 HISTORY_TABLE = os.environ.get("DYNAMODB_DOWNLOAD_HISTORY_TABLE", "kymo-download-history")
+OUTPUTS_BUCKET = os.environ.get("S3_OUTPUTS_BUCKET", "kymo-outputs")
 DOWNLOAD_QUEUE = os.environ.get("SQS_DOWNLOAD_QUEUE", "")
 
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
 sqs = boto3.client("sqs", region_name=REGION)
+s3 = boto3.client("s3", region_name=REGION)
+
+batches_table = dynamodb.Table(BATCHES_TABLE)
+jobs_table = dynamodb.Table(JOBS_TABLE)
 history_table = dynamodb.Table(HISTORY_TABLE)
 
 # ─── App ──────────────────────────────────────────────────────────────────────
@@ -85,7 +100,7 @@ def best_thumbnail(thumbnails: list[dict] | None) -> str | None:
     return best.get("url")
 
 
-# ─── Routes ───────────────────────────────────────────────────────────────────
+# ─── Health ───────────────────────────────────────────────────────────────────
 
 @app.get("/api/health")
 @app.get("/health")
@@ -120,6 +135,8 @@ def health():
         "binaries": {"ytDlp": yt_dlp, "ffmpeg": ffmpeg},
     }
 
+
+# ─── Resolve URL ──────────────────────────────────────────────────────────────
 
 class ResolveRequest(BaseModel):
     url: str
@@ -163,7 +180,6 @@ def resolve_url(req: ResolveRequest):
     except Exception:
         pass
 
-    # Cache download history for this channel
     video_count = data.get("playlist_count") or (len(data.get("entries", [])) if is_playlist else 1)
 
     return {
@@ -176,6 +192,8 @@ def resolve_url(req: ResolveRequest):
         "videoId": first.get("id"),
     }
 
+
+# ─── Video Metadata ───────────────────────────────────────────────────────────
 
 @app.get("/api/videos/{video_id}")
 @app.get("/video/{video_id}")
@@ -205,6 +223,8 @@ def get_video(video_id: str):
         }
     }
 
+
+# ─── Channel Browse ───────────────────────────────────────────────────────────
 
 @app.get("/api/channels/{channel_id}")
 @app.get("/channel/{channel_id}")
@@ -237,7 +257,6 @@ def get_channel(channel_id: str, page: int = 1, limit: int = 30, tab: str = "vid
             "publishedAt": e.get("upload_date"),
         })
 
-    # Get channel metadata from first entry or fetch separately
     channel_title = "Unknown"
     subscriber_count = None
     description = None
@@ -251,7 +270,6 @@ def get_channel(channel_id: str, page: int = 1, limit: int = 30, tab: str = "vid
         verified = first.get("channel_is_verified", False)
         thumbnail = best_thumbnail(first.get("thumbnails"))
 
-    # Fetch channel metadata if not in flat output
     if not subscriber_count:
         try:
             meta_out = run_ytdlp(["--dump-single-json", "--playlist-items", "1", "--no-warnings",
@@ -288,6 +306,8 @@ def get_channel(channel_id: str, page: int = 1, limit: int = 30, tab: str = "vid
     }
 
 
+# ─── Download History ─────────────────────────────────────────────────────────
+
 @app.get("/api/videos/downloaded")
 @app.get("/downloaded")
 def get_downloaded(ids: str = Query(...)):
@@ -310,27 +330,215 @@ def get_downloaded(ids: str = Query(...)):
     return {"downloaded": downloaded}
 
 
-@app.post("/download")
-class DownloadRequest(BaseModel):
-    videoId: str
-    format: str = "video"
-    quality: str = "highest"
-    includeThumbnail: bool = True
-    includeMetadata: bool = False
+# ─── Batch Management ─────────────────────────────────────────────────────────
 
-def trigger_download(req: DownloadRequest):
-    if not DOWNLOAD_QUEUE:
-        raise HTTPException(500, "SQS queue not configured")
+class VideoEntry(BaseModel):
+    id: str
+    title: str
+    channelId: str
+    channelTitle: str | None = None
+    kind: str | None = None
+    imageUrl: str | None = None
+    imageType: str | None = None
 
-    job = {
-        "videoId": req.videoId,
-        "kind": req.format,
-        "quality": req.quality,
-        "includeThumbnail": req.includeThumbnail,
-        "includeMetadata": req.includeMetadata,
+class BatchConfig(BaseModel):
+    kind: str
+    quality: str
+    includeThumbnail: bool | None = False
+    includeMetadata: bool | None = False
+
+class CreateBatchRequest(BaseModel):
+    videos: list[VideoEntry]
+    config: BatchConfig
+
+
+@app.post("/api/batches")
+def create_batch(req: CreateBatchRequest):
+    if not req.videos:
+        raise HTTPException(400, "Select at least one video to download")
+    if req.config.kind not in ("video", "audio"):
+        raise HTTPException(400, "Choose a format and quality before downloading")
+
+    batch_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    ttl = int(time.time()) + 30 * 86400
+
+    # Write batch record
+    batches_table.put_item(Item={
+        "id": batch_id,
+        "status": "pending",
+        "totalJobs": len(req.videos),
+        "completedJobs": 0,
+        "createdAt": now,
+        "expiresAt": ttl,
+    })
+
+    # Write job records with metadata inline (fixes "Unknown video" bug)
+    job_entries = []
+    for video in req.videos:
+        job_id = str(uuid.uuid4())
+        kind = "image" if video.kind == "image" else req.config.kind
+        quality = (
+            json.dumps({
+                "url": video.imageUrl,
+                "type": video.imageType,
+                "channelTitle": video.channelTitle or "Unknown Channel",
+            })
+            if video.kind == "image"
+            else req.config.quality
+        )
+
+        jobs_table.put_item(Item={
+            "id": job_id,
+            "batchId": batch_id,
+            "videoId": None if video.kind == "image" else video.id,
+            "videoTitle": video.title,
+            "videoThumbnail": None,
+            "kind": kind,
+            "quality": quality,
+            "includeThumbnail": False if video.kind == "image" else (req.config.includeThumbnail or False),
+            "includeMetadata": False if video.kind == "image" else (req.config.includeMetadata or False),
+            "status": "pending",
+            "progressPct": 0,
+            "outputPath": None,
+            "s3Key": None,
+            "error": None,
+            "createdAt": now,
+            "finishedAt": None,
+            "expiresAt": ttl,
+        })
+
+        job_entries.append({"jobId": job_id, "batchId": batch_id})
+
+    # Enqueue to SQS
+    for entry in job_entries:
+        sqs.send_message(
+            QueueUrl=DOWNLOAD_QUEUE,
+            MessageBody=json.dumps(entry),
+        )
+
+    return {"batchId": batch_id, "totalJobs": len(req.videos)}
+
+
+@app.get("/api/batches/active")
+def get_active_batches():
+    # Get active (pending/running) batches
+    result = batches_table.scan(
+        FilterExpression="#status IN (:pending, :running)",
+        ExpressionAttributeNames={"#status": "status"},
+        ExpressionAttributeValues={":pending": "pending", ":running": "running"},
+    )
+    active_batches = result.get("Items", [])
+
+    # Get most recent completed batch
+    done_result = batches_table.scan(
+        FilterExpression="#status IN (:done, :partial)",
+        ExpressionAttributeNames={"#status": "status"},
+        ExpressionAttributeValues={":done": "done", ":partial": "partial"},
+    )
+    done_batches = done_result.get("Items", [])
+    done_batches.sort(key=lambda b: b.get("createdAt", ""), reverse=True)
+    recent_done = done_batches[0] if done_batches else None
+
+    enriched = []
+    for batch in active_batches:
+        enriched.append(_enrich_batch(batch))
+
+    recent_completed = _enrich_batch(recent_done) if recent_done else None
+
+    return {"batches": enriched, "recentCompleted": recent_completed}
+
+
+@app.get("/api/batches/{batch_id}")
+def get_batch(batch_id: str):
+    resp = batches_table.get_item(Key={"id": batch_id})
+    batch = resp.get("Item")
+    if not batch:
+        raise HTTPException(404, "Batch not found — it may have been removed")
+
+    jobs_resp = jobs_table.query(
+        IndexName="batchId-index",
+        KeyConditionExpression=boto3.dynamodb.conditions.Key("batchId").eq(batch_id),
+    )
+    batch_jobs = jobs_resp.get("Items", [])
+
+    return {
+        "batch": {
+            "id": batch["id"],
+            "status": batch["status"],
+            "totalJobs": batch["totalJobs"],
+            "completedJobs": batch["completedJobs"],
+            "createdAt": batch["createdAt"],
+        },
+        "jobs": [_format_job(j) for j in batch_jobs],
     }
-    sqs.send_message(QueueUrl=DOWNLOAD_QUEUE, MessageBody=json.dumps(job))
-    return {"status": "queued", "job": job}
+
+
+def _enrich_batch(batch: dict) -> dict:
+    """Enrich a batch with its jobs (including video metadata)."""
+    jobs_resp = jobs_table.query(
+        IndexName="batchId-index",
+        KeyConditionExpression=boto3.dynamodb.conditions.Key("batchId").eq(batch["id"]),
+    )
+    batch_jobs = jobs_resp.get("Items", [])
+
+    return {
+        "batch": {
+            "id": batch["id"],
+            "status": batch["status"],
+            "totalJobs": batch["totalJobs"],
+            "completedJobs": batch["completedJobs"],
+            "createdAt": batch["createdAt"],
+        },
+        "jobs": [_format_job(j) for j in batch_jobs],
+    }
+
+
+def _format_job(job: dict) -> dict:
+    """Format a job for API response, using stored metadata."""
+    return {
+        "id": job["id"],
+        "videoId": job.get("videoId"),
+        "videoTitle": job.get("videoTitle", "Unknown video"),
+        "videoThumbnail": job.get("videoThumbnail"),
+        "kind": job["kind"],
+        "quality": job.get("quality"),
+        "status": job["status"],
+        "progressPct": job.get("progressPct", 0),
+        "error": job.get("error"),
+    }
+
+
+@app.get("/api/batches/{batch_id}/download")
+def download_job(batch_id: str, jobId: str = Query(...)):
+    resp = jobs_table.get_item(Key={"id": jobId})
+    job = resp.get("Item")
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job["batchId"] != batch_id:
+        raise HTTPException(400, "Job does not belong to this batch")
+    if job["status"] != "done":
+        raise HTTPException(400, "Job is not complete yet")
+    if not job.get("s3Key"):
+        raise HTTPException(404, "Download URL not available")
+
+    filename = job["s3Key"].rsplit("/", 1)[-1]
+    url = s3.generate_presigned_url(
+        "get_object",
+        Params={
+            "Bucket": OUTPUTS_BUCKET,
+            "Key": job["s3Key"],
+            "ResponseContentDisposition": f'attachment; filename="{filename}"',
+        },
+        ExpiresIn=900,
+    )
+
+    return {
+        "url": url,
+        "expiresIn": 900,
+        "filename": filename,
+        "kind": job["kind"],
+    }
 
 
 # ─── Mangum adapter for Lambda ───────────────────────────────────────────────
